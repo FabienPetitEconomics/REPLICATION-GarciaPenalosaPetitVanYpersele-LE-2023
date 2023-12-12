@@ -1,0 +1,27 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+_data/_raw/BOTH/*
+!_data/_raw/BOTH/*.md
+_data/_raw/LFS/*
+!_data/_raw/LFS/*.md
+_data/_raw/LFS-EU/*
+!_data/_raw/LFS-EU/*.md
+_data/_raw/BCS - GN 33229/*
+!_data/_raw/BCS - GN 33229/*.md
+_data/_raw/NCDS - GN 33004/*
+!_data/_raw/NCDS - GN 33004/*.md
+_data/_clean/_lfs/*
+!_data/_clean/_lfs/*.md
+_data/_clean/_cohort/*
+!_data/_clean/_lfs/*.md
+
+_data/cohort_data.csv
+_data/cohort_acthist.csv
+_data/first_job.csv
+
+.Rdata
+.httr-oauth
+.DS_Store
