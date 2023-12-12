@@ -1,0 +1,3500 @@
+# Data
+
+In this section we describe the data used in our paper. For more details on variables construction, please refer to `_script/project_data.R` script.
+
+## Datasets
+
+```{r init}
+# Initialization script
+source(file.path("_script", "init.R"))
+# Load data
+cohdata <- read.csv(file.path(loc_data, "cohort_data.csv")) # Cohort data
+acthist <- read.csv(file.path(loc_data, "cohort_acthist.csv")) # Activity history
+first_job <- read.csv(file.path(loc_data, "first_job.csv")) # First job
+location <- read.csv(file.path(loc_data, "_clean", "_cohort", "location.csv")) # Location
+lfs <- read.csv(file.path(loc_data, "_clean", "_lfs", "lfs.csv")) # Labour Force Survey
+ukgdp <- read.csv(file.path(loc_data, "series-180322.csv")) # ONS - Downloaded from https://www.ons.gov.uk/economy/grossdomesticproductgdp/timeseries/abmi/pn2
+shiftIV <- read.csv(file.path(loc_data, "_clean", "_lfseu", "lfseu_shiftIV.csv"))
+# Lists
+list.table <- list() # Contains all tables
+list.reg <- list() # Contains all regressions
+list.formula <- list() # Contains all formulas (used for regressions)
+list.coef <- list() # Contains all coefficients
+list.pred <- list() # Contains all predictions
+list.graph <- list() # Contains all figures
+list.decomp <- list() # Contains all decompositions
+set.seed(420)
+```
+
+**Regions.**
+
+```{r}
+# Location names and abbreviations
+location_names <- c("East Anglia", "East Midlands", "North", "North West",
+                    "Scotland", "South East", "South West", "Wales", "West Midlands", 
+                    "Yorkshire and Humberside") %>% 
+  setNames(c("EA", "EM", "N", "NW", "SC", "SE", "SW", "WAL", "WM", "YH"))
+```
+
+**Cohort data.** The `cohdata` dataset provides the data from the NCDS58 and BCS70 cohort studies. Variables are defined as follows. 
+
+* `cohort` (*dummy*) determines to which cohort the individual belongs (`NCDS58` or `BCS70`). 
+* `id` (*factor*) corresponds to the identifier of the cohort member (CM).
+* `sex` (*dummy*) is the sex at birth (`Male` or `Female`).
+* `educ` (*integer*) captures the level of education.^[There are 11 categories which are (from the lowest to the highest): no qualifications; less than O-level; less than 5 O-levels; 5+ O-levels; 1 A-level and less than 5 O-levels; 1 A-level and 5+ O-levels; 2+ A-levels and less than 5 O-levels; 2+ A-levels and 5+ O-levels; Sub degrees; Degree - lower grade; Degree - first and upper second grade; and Higher degree.] 
+* `pinc` (*numeric*) gives the parental income in £1970.
+* `pactiv` is a dummy variable that indicates whether the father of CM was working or out-of-work at the age of 11 (resp. 10) for the NCDS58 (resp. BCS70) cohort. 
+* `psc` (*factor*) is the father's social class at the same age. 
+* `pisco88` (*factor*) gives the ISCO-88 occupation of the father (when available).
+* `educ_left` (*factor*) determines at which age parents left school. 
+* `educ_int` (*factor*) describes the interest of parents in CM's education.
+* `age` (*integer*) gives the age of parents. 
+* `HHsize` (*integer*) corresponds to the size of the household, CM included.
+* `SIBposition` (*integer*) reveals the position of the child in the sibling, 1 being the eldest. 
+* `SIBsize` (*integer*) refers to the size of the siblings.
+* `region` (*factor*) indicates the region in which CM lives at the age of 11 (resp. 10) for the NCDS58 (resp. BCS70).
+* `pay` (*numeric*) indicates the weekly pay in £1970 according to the period.
+
+**Activity history.** The `acthist` dataset provides data on the activity history for both cohorts. Variables are defined as follows. 
+
+* `cohort` (*dummy*) determines to which cohort the individual belongs (`NCDS58` or `BCS70`).
+* `id` (*factor*) corresponds to the identifier of the cohort member (CM).
+* `date` (*date*) corresponds to the date at which the observation is made. 
+* `age` (*integer*) corresponds to the age of CM for this observation. 
+* `present` (*present*) indicates whether the CM was present at the interview (`NA` values are in-between interview periods for robustness checks).
+* `jactiv` (*factor*) defines the activity of CM.^[There are 12 levels (in alphabetical order): Education, Employee, Home, Long term sick, Maternity leave, Other, Retired, Self employed, Temporary sick, Training scheme, Unemployed, Voluntary work] 
+* `jempst` (*factor*) corresponds to the employment status (Employee, Foreman/Supervisor, Manager and Self-employed), if working. 
+* `jftpt` (*dummy*) determines whether the CM works full-time or part-time, if working. 
+* `isco88` (*isco88*) gives the occupation according to the ISCO-88 classification.
+
+## Occupation classification
+
+The `classification_isco88` dataset is set to define the ISCO-88. Then, we group occupations into three categories: Low-paying, Middling and High-paying, similar to GMS2014. In GMS2014, RTI for ISCO-88 occupations 11, 23, 33, 61 and 92 are not provided. Thus, we assign them to the occupation category as their closest 1-digit ISCO-88 occupations.
+
+```{r isco88-classification}
+# ISCO-88 Classification
+classification_isco88 = data.frame(
+  "isco88" = c(11:13, 21:24, 31:34, 41:42, 51:52, 61, 71:74, 81:83, 91:93),
+  "occupation" = c("Legislators and senior officials",
+                   "Corporate managers",
+                   "Managers of small enterprises",
+                   "Physical, mathematical and engineering professionals",
+                   "Life science and health professionals",
+                   "Teaching professionals",
+                   "Other professionals",
+                   "Physical, mathematical and engineering associate professionals",
+                   "Life science and health associate professionals",
+                   "Teaching associate professionals",
+                   "Other associate professionals",
+                   "Office clerks",
+                   "Customer service clerks",
+                   "Personal and protective service workers",
+                   "Models, salespersons and demonstrators",
+                   "Skilled agricultural and fishery workers",
+                   "Extraction and building trades workers",
+                   "Metal, machinery and related trade work",
+                   "Precision, handicraft, craft printing and related trade workers",
+                   "Other craft and related trade workers",
+                   "Stationary plant and related operators",
+                   "Machine operators and assemblers",
+                   "Drivers and mobile plant operators",
+                   "Sales and service elementary occupations",
+                   "Agricultural, fishery and related labourers",
+                   "Laborers in mining, construction, manufacturing and transport")
+  ) %>% 
+  # Define occupational groups (High, Mid, Low)
+  mutate(occ_group = case_when(
+      isco88 %in% c(11, 12, 13, 21, 22, 23, 24, 31, 32, 33, 34) ~ "High-paying",
+      isco88 %in% c(41, 42, 61, 71, 72, 73, 74, 81, 82, 83) ~ "Middling",
+      isco88 %in% c(51, 52, 91, 92, 93) ~ "Low-paying") %>% 
+        factor(levels = c("High-paying", "Middling", "Low-paying", "Unclassified"))
+  ) %>% 
+  select(occ_group, isco88, occupation) %>% # Select variables
+  arrange(occ_group, isco88) # Arrange by occupational group and ISCO-88
+
+# Write
+write.csv(classification_isco88, file.path(loc_data, "classification_isco88.csv"), 
+          row.names = F)
+```
+
+Table \@ref(tab:isco88-classification-groups) provides the overview of ISCO-88 occupation codes.
+
+```{r isco88-table, echo = F}
+# Print classification
+class_table = classification_isco88 %>% 
+  select(isco88, occupation) %>% # Select occupation
+  setNames(c("Code", "Occupation")) # Rename columns
+
+# Write table (LaTeX format)
+class_table2 = class_table %>% 
+  kable(format = "latex", booktabs = TRUE, linesep = "", escape = FALSE) %>%
+  # Group occupations
+    pack_rows("High-paying occupations", 1, 11) %>%
+    pack_rows("Middling occupations", 12, 21) %>%
+    pack_rows("Low-paying occupations", 22, 26) %>% 
+  row_spec(0, bold=TRUE) %>% # Highlight column names
+  writeLines(., con = file.path(loc_tabular, "data-isco88.tex"), sep = "\n")
+```
+
+## Activity history
+
+We define several periods for both cohorts:
+
+* `p1` is the **first period** in the paper and corresponds to age 23 for the NCDS58 cohort and age 26 for the BCS70 cohort. 
+* `p2` is an intermediate period that we do not consider in the paper, but it refers to age 33 for the NCDS58 and 34 for the BCS70.
+* `p3` is the **second period** in the paper and refers to age 42 for both cohorts.
+* `rob1` is the period associated to the robustness check that set the same ages for both cohorts in the first period. Either both are 23 or 26 in this specification.
+
+Other variables are presented in section \@ref(data-datasets).
+
+```{r data-acthist1}
+## Define periods from activity history
+acthist1 = acthist %>% 
+  mutate(cohort.age = paste(cohort, age, sep = ".")) %>% # Interaction of cohort and age
+  # Select cohort.age of interest
+  subset(cohort.age %in% c("NCDS.23", "NCDS.26", "NCDS.33", "NCDS.42", 
+                           "BCS.23", "BCS.26", "BCS.34", "BCS.42")) %>% 
+  # Define periods
+  mutate(period = factor(cohort.age, 
+    levels = c("NCDS.23", "NCDS.26", "NCDS.33", "NCDS.42", 
+               "BCS.23", "BCS.26", "BCS.34", "BCS.42"),
+    labels = c("p1", "rob1", "p2", "p3", "rob1", "p1", "p2", "p3"))) %>% # Period names
+  select(id, cohort.age, age, period, jactiv, isco88) # Select variables
+```
+
+We define several versions of activity status `jactiv` and occupations groups `occ_group`. The number following the variable name refers to the number of factors in the version. Example: `jactiv3` provides three activity status, namely, `Work`, `Educ`, and `InacUnemp`. This latter variable is used to derive the occupation groups `occ_group5`. Individuals in `Educ` are assigned to `Education`, those in `InacUnemp` are `Out-of-work`. The three remaining groups are `High-paying`, `Middling`, and `Low-paying` which have been derived from the ISCO-88 occupations using the classification from Table \@ref(tab:isco88-classification-groups). The variable `occ_group4` regroups the `Education` category into the `Out-of-work` one and is our preferred occupation. We keep `occ_group5` as a robustness check as one might be concerned by the gathering of both.
+
+```{r data-acthist2}
+## Define activity status and occupation groups
+acthist2 = acthist1 %>% 
+  # jactiv: Activity status (different versions)
+  mutate(
+    jactiv5 = factor(jactiv,
+      levels = c("Employee", "Self employed", "Education", "Unemployed", "Maternity leave",
+                 "Temporary sick", "Long term sick", "Home", "Retired", "Training scheme",
+                 "Voluntary work", "Other"),
+      labels = c("Emp", "Self", "Educ", "Unemp", rep("Inactive", 8))),
+    jactiv4 = factor(jactiv5, labels = c("Emp", "Self", "Educ", "InacUnemp", "InacUnemp")),
+    jactiv3 = factor(jactiv4, labels = c("Work", "Work", "Educ", "InacUnemp")),
+    jactiv2 = factor(jactiv3, labels = c("Work", "Out", "Out")),
+    ) %>% 
+  # Occupation groups derived from 2-digit ISCO-88
+  mutate(isco88 = substr(as.character(isco88), 1, 2) %>% as.numeric) %>% # Get 2-digit ISCO-88
+  merge(select(classification_isco88, isco88, occ_group), by = "isco88", all = T) %>% # Merge
+  # occ_group: Occupation groups (different versions)
+  mutate(
+    occ_group5 = case_when(
+      is.na(occ_group) & jactiv3 == "Educ" ~ "Education",
+      is.na(occ_group) & jactiv3 == "InacUnemp" ~ "Out-of-work",
+      TRUE ~ as.character(occ_group)) %>% 
+      factor(levels = c("Out-of-work", "Education", "Low-paying", "Middling", "High-paying")),
+    occ_group4 = factor(occ_group5, 
+      labels = c(rep("Out-of-work", 2), "Low-paying", "Middling", "High-paying"))
+    ) %>%  
+  arrange(id, period) %>% # Arrange by id and period
+  select(id, cohort.age, age, period, starts_with("jactiv"), isco88, starts_with("occ"))
+```
+
+## Individual characteristics
+
+```{r}
+## Individual characteristics
+cohdata1 = cohdata %>% 
+  # Father's occupation groups derived from 2-digit ISCO-88
+  mutate(pisco88 = substr(as.character(pisco88), 1, 2) %>% as.numeric) %>%
+  merge(select(classification_isco88, isco88, pocc_group = occ_group), 
+        by.x = "pisco88", by.y = "isco88", all = T) %>% # Merge classification
+  # Add Out-of-work fathers
+  mutate(
+    pocc_group4 = case_when(
+      is.na(pocc_group) & pactiv == "Out" ~ "Out-of-work",
+      TRUE ~ as.character(pocc_group)) %>% 
+      factor(levels = c("Out-of-work", "Low-paying", "Middling", "High-paying")) # Reorder
+  ) %>% 
+  # Relevel factors
+  mutate(cohort = factor(cohort, levels = c("NCDS", "BCS"), labels = c("NCDS58", "BCS70")),
+         sex = factor(sex, levels = c("Male", "Female")), # Rename cohort
+         eldest = factor(ifelse(SIBpos_cp3 == 1, "Yes", "No"))) %>% # Eldest child
+  arrange(id) %>% # Arrange by id
+  # Select and rename variables
+  select(id, age_LS, cohort, sex, educ, # CM characteristics
+         pinc, pactiv2 = pactiv, psc, pisco88, pocc_group4, # Parents status
+         educ_left_father, educ_left_mother, # Parents education
+         educ_int_father, educ_int_mother, # Parents interest in education
+         age_father, age_mother, # Parents age
+         # Household composition when child at age 16
+         HHsize = HHsize_cp3, SIBpos = SIBpos_cp3, SIBsize = SIBsize_cp3, eldest,
+         region_16yo) # Region at age 16
+```
+
+## Pay
+
+```{r pay}
+## CM pay
+pay = cohdata %>% 
+  select(id, pay_p1, pay_p3) %>% 
+  setDT %>% melt(id.var = "id", variable.name = "period", value.name = "pay") %>% 
+  mutate(period = factor(substr(period, 5, 6))) %>% 
+  arrange(id, period)
+```
+
+## Merge
+
+```{r}
+## Merged dataframe
+df = merge(acthist2, pay, by = c("id", "period"), all = T) %>% 
+  merge(cohdata1, by = c("id"), all = T)
+
+# Time invariant variables
+var_indiv = names(cohdata1)
+```
+
+## Sample
+
+```{r}
+## Dataframes
+# Main analysis
+df.main = df %>% 
+  # CM present at interview
+  subset(age <= age_LS) %>%
+  # CM not Abroad
+  subset(region_16yo != "Abroad") %>% 
+  # No NA for parental income and occupations
+  subset(!is.na(pinc) & !is.na(occ_group4)) %>% 
+  # Data on CM at period 1 and 3
+  subset(id %in% pull(subset(count(subset(., period %in% c("p1", "p3")), id), n==2), id))
+
+# Education
+df.educ = cohdata1 %>%
+  # No NA for education
+  subset(!is.na(educ))
+```
+
+```{r}
+df.missing = df %>% 
+  # CM not Abroad
+  subset(region_16yo != "Abroad") %>% 
+  merge(select(cohdata, id, pinc10, pinc16), by = "id") %>% 
+  select(cohort, id, period, pinc16, occ_group4)
+
+df.missing.wide16 <- df.missing %>% 
+  subset(!is.na(pinc16)) %>% 
+  as.data.table %>% 
+  dcast(id + pinc16 ~ period, value.var = "occ_group4") %>% 
+  mutate(cohort = factor(substr(id, 1, 1), 
+                         levels = c("N", "B"), labels = c("NCDS58", "BCS70"))) %>% 
+  group_by(cohort) %>% 
+  # mutate(pinc16 = log(pinc16)) %>% 
+  mutate(type = case_when(is.na(p1) & is.na(p3) ~ "miss_both",
+                          is.na(p1) ~ "miss_p1",
+                          is.na(p3) ~ "miss_p3",
+                          TRUE ~ "present_both",) %>% 
+           factor(levels = c("miss_both", "miss_p1", "miss_p3", "present_both"),
+                  labels = c("Missing in both",
+                             "Missing in first",
+                             "Missing in second",
+                             "Present in both")))
+
+df.missing.wide16B <- df.missing.wide16  %>% 
+  # subset(type != "Missing in both") %>%
+  group_by(cohort) %>% 
+  mutate(pinc_decile = cut(pinc16, 
+                           breaks = quantile(pinc16, probs = seq(0, 1, 1/5)),
+                           na.rm = T,
+                           labels = F, include.lowest = T))
+
+df.missing.wide16C <- df.missing.wide16B %>% 
+  # subset(type != "Missing in both") %>%
+  mutate(type2 = factor(type, levels = levels(df.missing.wide16B$type),
+                        labels = c(rep("Missing", 3), "Present"))) %>%
+  count(type2, cohort, pinc_decile) %>%
+  add_count(cohort, pinc_decile, wt = n, name = "N") %>% 
+  mutate(p = n/N, sd = sqrt(p*(1-p)/N), inter = 1.96*sd) %>% 
+  mutate(share = p*100, share_inf = (p-inter)*100, share_sup = (p+inter)*100)
+
+# Figure
+df.missing.wide16C %>% 
+  # subset(type %in% c("Missing in both")) %>%
+  # subset(type %in% c("Missing in second", "Missing in first")) %>%
+  subset(type2 %in% "Present") %>%
+  
+  ggplot(aes(x = pinc_decile, y = share, fill = cohort)) +
+  geom_bar(stat = "identity", alpha = .8, position = position_dodge2()) +
+  # geom_point(position=position_dodge(0.1)) +
+  # geom_errorbar(aes(ymin=share_inf, ymax=share_sup), width=.1, position=position_dodge(0.1)) +
+  # facet_wrap(type ~ .)+
+  scale_fill_grey(start = .5, end = 0) +
+  theme_bw() +
+  theme(legend.position = "right") +
+  labs(x = "Parental income quintile", y = "Cohort members share (in percent)",
+       shape = element_blank(), fill = element_blank())
+ggsave(file.path(loc_graphic, "stat-missing-pinc-1.png"), width = 10, height = 10/2.5)
+```
+
+```{r}
+df.missing = df %>% 
+  # CM not Abroad
+  subset(region_16yo != "Abroad") %>% 
+  merge(select(cohdata, id, pinc10, pinc16), by = "id") %>% 
+  select(cohort, id, period, pinc16, occ_group4)
+
+df.missing.wide16 <- df.missing %>% 
+  subset(!is.na(pinc16)) %>% 
+  as.data.table %>% 
+  dcast(id + pinc16 ~ period, value.var = "occ_group4") %>% 
+  mutate(cohort = factor(substr(id, 1, 1), 
+                         levels = c("N", "B"), labels = c("NCDS58", "BCS70"))) %>% 
+  group_by(cohort) %>% 
+  # mutate(pinc16 = log(pinc16)) %>% 
+  mutate(type = case_when(is.na(p1) & is.na(p3) ~ "miss_both",
+                          is.na(p1) ~ "miss_p1",
+                          is.na(p3) ~ "miss_p3",
+                          TRUE ~ "present_both",) %>% 
+           factor(levels = c("miss_both", "miss_p1", "miss_p3", "present_both"),
+                  labels = c("Missing in both",
+                             "Missing in first",
+                             "Missing in second",
+                             "Present in both")))
+
+df.missing.wide16B <- df.missing.wide16  %>% 
+  subset(type != "Missing in both") %>%
+  group_by(cohort) %>% 
+  mutate(pinc_decile = cut(pinc16, 
+                           breaks = quantile(pinc16, probs = seq(0, 1, 1/5)),
+                           na.rm = T,
+                           labels = F, include.lowest = T))
+
+df.missing.wide16C <- df.missing.wide16B %>% 
+  # subset(type != "Missing in both") %>%
+  mutate(type2 = factor(type, levels = levels(df.missing.wide16B$type),
+                        labels = c(rep("Missing", 3), "Present"))) %>%
+  count(type2, cohort, pinc_decile) %>%
+  add_count(cohort, pinc_decile, wt = n, name = "N") %>% 
+  mutate(p = n/N, sd = sqrt(p*(1-p)/N), inter = 1.96*sd) %>% 
+  mutate(share = p*100, share_inf = (p-inter)*100, share_sup = (p+inter)*100)
+
+# Figure
+df.missing.wide16C %>% 
+  # subset(type %in% c("Missing in both")) %>%
+  # subset(type %in% c("Missing in second", "Missing in first")) %>%
+  subset(type2 %in% "Present") %>%
+  
+  ggplot(aes(x = pinc_decile, y = share, fill = cohort)) +
+  geom_bar(stat = "identity", alpha = .8, position = position_dodge2()) +
+  # geom_point(position=position_dodge(0.1)) +
+  # geom_errorbar(aes(ymin=share_inf, ymax=share_sup), width=.1, position=position_dodge(0.1)) +
+  # facet_wrap(type ~ .)+
+  scale_fill_grey(start = .5, end = 0) +
+  theme_bw() +
+  theme(legend.position = "right") +
+  labs(x = "Parental income quintile", y = "Cohort members share (in percent)",
+       shape = element_blank(), fill = element_blank())
+ggsave(file.path(loc_graphic, "stat-missing-pinc-2.png"), width = 10, height = 10/2.5)
+```
+
+## Standardize
+
+```{r}
+## Main dataset (in wide format)
+df.wide = df.main %>% setDT %>% 
+  dcast.data.table(paste0(paste0(c("id", names(df.main)[15:ncol(df.main)]), collapse = " + "), " ~ period"),
+        value.var = names(df.main)[5:14]) %>% 
+  group_by(cohort) %>% 
+  # Logarithm
+  mutate("pinc_LOG" = log(pinc)) %>% 
+  # Peer-inclusive downward looking ranking and Logarithm
+  mutate(psc = -psc) %>% # Reverse scale for Father's social class
+  mutate_at(vars("educ", starts_with("educ_left"), "psc"), list("PIR" = ~ PIRanking(.))) %>% 
+  # Standardized variables
+  mutate_at(vars("pinc", ends_with("LOG"), ends_with("PIR")), list("STD" = ~ standardize(.))) %>% 
+  # Squared variables
+  mutate(pinc_STD2 = pinc_STD^2) %>% 
+  ungroup %>% 
+  # Mobility
+  mutate(mobility = case_when(
+    as.numeric(occ_group4_p1) < as.numeric(occ_group4_p3) ~ "Up",
+    as.numeric(occ_group4_p1) == as.numeric(occ_group4_p3) ~ "Persist",
+    as.numeric(occ_group4_p1) > as.numeric(occ_group4_p3) ~ "Down") %>% 
+      factor(levels = c("Down", "Persist", "Up")),
+    mob2up = factor(mobility, levels = c("Down", "Persist", "Up"), labels = c("Down", "Not Down","Not Down")),
+    mob2down = factor(mobility, levels = c("Down", "Persist", "Up"), labels = c("Not Up", "Not Up", "Up")),
+    mobabs = factor(mobility, levels = c("Down", "Persist", "Up"), labels = c("Move", "Persist", "Move"))
+  )
+
+## Main dataset (in long format)
+df.long = df.main %>% 
+  merge(select(df.wide, id, ends_with("LOG"), ends_with("PIR"), ends_with("STD")), by = "id")
+
+## Educ dataset
+df.educ1 = df.educ %>% 
+  group_by(cohort) %>% 
+  # Logarithm
+  mutate("pinc_LOG" = log(pinc)) %>% 
+  # Peer-inclusive downward looking ranking and Logarithm
+  mutate(psc = -psc) %>% # Reverse scale for Father's social class
+  mutate_at(vars("educ", starts_with("educ_left"), "psc"), list("PIR" = ~ PIRanking(.))) %>% 
+  # Standardized variables
+  mutate_at(vars("pinc", ends_with("LOG"), ends_with("PIR"), "SIBsize", ), 
+            list("STD" = ~ standardize(.))) %>% 
+  # Squared variables
+  mutate(pinc_STD2 = pinc_STD^2) %>% 
+  ungroup 
+```
+
+## Labour Force Survey
+
+```{r}
+lfs1 <- lfs %>% 
+  # Derive 2-digit ISCO-88
+  mutate(isco88 = substr(isco88, 1, 2)) %>% 
+  # Merge occupational categories
+  merge(select(classification_isco88, occ_group, isco88), by = "isco88", all.x = T) %>% 
+  # Reorder factors
+  mutate(sex = factor(sex, levels = c("Male", "Female")),
+    isco88 = factor(isco88),
+    occ_group = as.character(occ_group) %>% 
+      ifelse(is.na(.), "Out-of-work", .) %>% 
+      factor(levels = c("Out-of-work", "Low-paying", "Middling", "High-paying")),
+    location = ifelse(location == "Yorkshire and the Humber", 
+                      "Yorkshire and Humberside", location) # To be included in ukcs
+    ) %>% 
+  # Reorder variables
+  select(year, hhid, pid, location, relation, sex, age, 
+         activity, isco88, occ_group) %>% 
+  # Reorder observations
+  arrange(year, hhid, pid)
+```
+
+```{r}
+age_range = 0
+
+lfs2 <- lfs1 %>% 
+  # subset(age %in% c(23:50)) %>% 
+  subset(location != "Northern Ireland") %>% 
+  mutate(
+    NCDS58 = ifelse(year %in% c(1981:2000), 1, 0), 
+    BCS70 = ifelse(year %in% c(1996:2012), 1, 0),
+    t = year - 1981, age_NCDS58 = year-1958, age_BCS70 = year-1970) %>% 
+  rowwise %>% 
+  mutate(
+    NCDS58_cycle = ifelse(age %in% c({age_NCDS58-age_range}:{age_NCDS58+age_range}), 1, 0),
+    BCS70_cycle = ifelse(age %in% c({age_BCS70-age_range}:{age_BCS70+age_range}), 1, 0)
+    ) %>% ungroup
+
+# Over the NCDS58 lifecycle
+lfs2.NCDS58 <- lfs2 %>% 
+  subset(NCDS58 == 1 & NCDS58_cycle == 1)
+
+lfs3.NCDS58.job = lfs2.NCDS58 %>% 
+  subset(occ_group != "Out-of-work") %>% 
+  count(year, location, occ_group, name = "n") %>% 
+  add_count(year, location, wt = n, name = "N") %>% 
+  mutate(prop = n/N*100) %>% 
+  mutate(cohort = "NCDS58") %>% 
+  select(cohort, year, location, occ_group, prop, n, N)
+
+# Over the BCS70 lifecycle
+lfs2.BCS70 <- lfs2 %>% 
+  subset(BCS70 == 1 & BCS70_cycle == 1) 
+  
+lfs3.BCS70.job = lfs2.BCS70 %>% 
+  subset(occ_group != "Out-of-work") %>% 
+  count(year, location, occ_group, name = "n") %>% 
+  add_count(year, location, wt = n, name = "N") %>% 
+  mutate(prop = n/N*100) %>% 
+  mutate(cohort = "BCS70") %>% 
+  select(cohort, year, location, occ_group, prop, n, N)
+
+# Rbind both
+lfs3 <- rbind(lfs3.NCDS58.job, lfs3.BCS70.job)
+```
+
+```{r}
+lfs3.NCDS58.all = lfs2.NCDS58 %>% 
+  subset(age == age_NCDS58) %>% 
+  count(year, location, occ_group, name = "n") %>% 
+  add_count(year, location, wt = n, name = "N") %>% 
+  mutate(prop = n/N*100) %>% 
+  mutate(cohort = "NCDS58") %>% 
+  select(cohort, year, location, occ_group, prop, n, N)
+
+lfs3.BCS70.all = lfs2.BCS70 %>% 
+  subset(age == age_BCS70) %>% 
+  count(year, location, occ_group, name = "n") %>% 
+  add_count(year, location, wt = n, name = "N") %>% 
+  mutate(prop = n/N*100) %>% 
+  mutate(cohort = "BCS70") %>% 
+  select(cohort, year, location, occ_group, prop, n, N)
+
+lfs3.all <- rbind(lfs3.NCDS58.all, lfs3.BCS70.all)
+```
+
+## UK GDP
+
+```{r}
+ukgdp1 = ukgdp[c(82:349),] %>% 
+  setNames(c("date", "GDP")) %>%  
+  separate(date, into = c("year", "quarter"), sep = " ") %>% 
+  mutate(
+    year = as.integer(year),
+    quarter = factor(quarter, levels = paste0("Q", 1:4), labels = c(0, .25, .5, .75)) %>% 
+      as.character %>% as.numeric,
+    GDPgrowth = as.integer(GDP) %>% {{./lag(.,1)-1}*100},
+    date = year + quarter) %>% 
+  select(year, quarter, date, GDPgrowth)
+row.names(ukgdp1) <- NULL
+```
+
+# Descriptive statistics {#stat}
+
+```{r}
+require(fastDummies)
+
+list.table$stats$indiv0 = df.wide %>% 
+  select(cohort, sex:region_16yo) %>% 
+  mutate(
+    educ4 = factor(educ, labels = c(rep("Secondary", 7), "Sub degree", rep("Degree", 2), "Higher degree")),
+    psc = -psc,
+    ) %>% 
+  mutate_at(vars(starts_with("educ_left")), ~ {as.numeric(as.factor(.))+12}) %>% 
+  dummy_cols(c("educ4", "pocc_group4", "educ_int_father", "educ_int_mother")) %>% 
+  mutate_if(is.factor, ~ {as.integer(.)-1}) %>% 
+  summarise_at(vars(
+    # Child characteristics
+    cohort, sex, starts_with("educ4_"), eldest,
+    # Parents
+    pinc, psc, starts_with("pocc_group4_"), starts_with("educ_left_"),
+    starts_with("educ_int_father_"), starts_with("educ_int_mother_"), age_father, age_mother, HHsize, SIBpos, SIBsize
+    ), 
+    list(mean = ~ mean(., na.rm = T), sd = ~ sd(., na.rm = T), min = ~ min(., na.rm = T), 
+         q1 = ~ quantile(., .25, na.rm = T), median = ~ quantile(., .5, na.rm = T), 
+         q3 = ~ quantile(., .75, na.rm = T), max = ~ max(., na.rm = T),
+         na = ~ sum(is.na(.)))) %>% 
+  melt(id.var = integer()) %>% 
+  tidyr::separate(variable, c("variable", "stat"), sep = "_(?=[^_]+$)") %>% 
+  setDT %>% dcast(variable ~ stat) %>% 
+  select(variable, mean, sd, min, q1, median, q3, max, na) %>% 
+  mutate(variable = factor(variable,
+    levels = c(
+      # Child
+      "cohort", "sex", "educ4_Secondary", "educ4_Sub degree", "educ4_Degree", "educ4_Higher degree",
+      
+      # Household
+      "pinc", "SIBsize", "eldest", 
+      
+      # Mother
+      "age_mother", "educ_left_mother", 
+      "educ_int_mother_Very interested", "educ_int_mother_Moderate interest", "educ_int_mother_Cannot say",
+      "educ_int_mother_Little interest", #"educ_int_mother_NA",
+      
+      # Father
+      "age_father", "educ_left_father", 
+      "educ_int_father_Very interested", "educ_int_father_Moderate interest", "educ_int_father_Cannot say",
+      "educ_int_father_Little interest", #"educ_int_father_NA",
+      "psc",
+      "pocc_group4_High-paying", "pocc_group4_Middling", "pocc_group4_Low-paying", 
+      "pocc_group4_Out-of-work" #"pocc_group4_NA"
+      ))) %>% 
+  filter(!is.na(variable)) %>%
+  arrange(variable) %>%
+  mutate(variable = factor(variable, labels = c(
+    # Child
+    "BCS Cohort", "Female", "Education - Secondary", "Education - Sub degree", "Education - Degree", 
+    "Education - Higher degree", 
+    # Household
+    "Parental income", "Sibling size", "Eldest child",
+    # Mother
+    "Age", "Age left school", "Int. in educ. - Very interested", "Int. in educ. - Moderate interest", 
+    "Int. in educ. - Cannot say", "Int. in educ. - Little interest", #"Int. in educ. - NA",
+    # Father
+    "Age", "Age left school", "Int. in educ. - Very interested", "Int. in educ. - Moderate interest", 
+    "Int. in educ. - Cannot say", "Int. in educ. - Little interest", #"Int. in educ. - NA",
+    "Social class", "Occupation - High-paying", "Occupation - Middling", "Occupation - Low-paying", 
+    "Occupation - Out-of-work"#, "Occupation - NA"
+    ))) %>% 
+  mutate_at(vars(mean:max), ~ sprintf("%.2f", .))
+
+
+nobs = paste0("N", nrow(df.wide))
+nobs
+
+list.table$stats$indiv0 %>% 
+  
+  
+  kable(format = "latex", booktabs = TRUE, linesep = "", escape = FALSE, align = c("lrrrrrrrr"),
+        col.names = c("Variable", "Mean", "SD", "Min", "Q1", "Median", "Q3", "Max", "NA")) %>%
+  add_header_above(c("", "N = 14763" = 8), escape = F) %>%  
+  
+  pack_rows("Child", 1, 6, italic = T, bold = F, extra_latex_after = "\\midrule\n") %>% 
+  pack_rows("Household", 7, 9, italic = T, bold = F, extra_latex_after = "\\midrule\n") %>% 
+  pack_rows("Mother", 10, 15, italic = T, bold = F, extra_latex_after = "\\midrule\n") %>% 
+  pack_rows("Father", 16, 26, italic = T, bold = F, extra_latex_after = "\\midrule\n") %>% 
+  
+  strsplit("\n") %>% unlist %>% 
+  
+  {c(.[c(1:6)], "\\midrule", .[c(9:16)], "\\midrule", .[c(18:22)], 
+    "\\midrule", .[c(24:31)], "\\midrule", .[c(33:47)])} %>%
+  
+  writeLines(., con = file.path(loc_tabular, "stat-indiv.tex"), sep = "\n")
+
+```
+
+```{r}
+list.table$stats$cohort0 = df.long %>% 
+  filter(period %in% c("p1", "p3")) %>% 
+  select(id, cohort, period, jactiv5, occ_group5, pay) %>% 
+  dummy_cols(c("jactiv5", "occ_group5")) %>% 
+  mutate(pay = ifelse(pay < 1 | pay >300, NA, pay))
+  
+list.table$stats$cohort1 = list.table$stats$cohort0 %>% 
+  group_by(cohort, period) %>% 
+  summarise_at(vars(starts_with("jactiv5_"), starts_with("occ_group5_"), starts_with("pay")),
+    list(mean = ~ mean(., na.rm = T), 
+         sd = ~ sd(., na.rm = T) #, 
+         # min = ~ min(., na.rm = T), 
+         # q1 = ~ quantile(., .25, na.rm = T), 
+         # median = ~ quantile(., .5, na.rm = T), 
+         # q3 = ~ quantile(., .75, na.rm = T), 
+         # max = ~ max(., na.rm = T)#,
+         # na = ~ sum(is.na(.)))
+    )) %>% setDT %>% 
+  melt(id.var = c("cohort", "period")) %>% 
+  tidyr::separate(variable, c("variable", "stat"), sep = "_(?=[^_]+$)") %>%
+  mutate(stat = factor(stat, levels = c("mean", "sd", "min", "q1", "median", "q3", "max", "na"))) %>% 
+  
+  setDT %>% dcast(variable ~ cohort + period + stat, value.var = "value") %>% 
+  mutate(variable = factor(variable,
+    levels = c(
+      # jactiv5
+      "jactiv5_Emp", "jactiv5_Self", "jactiv5_Unemp", "jactiv5_Educ",  "jactiv5_Inactive",
+      # occ
+      "occ_group5_High-paying", "occ_group5_Middling", "occ_group5_Low-paying",
+      "occ_group5_Out-of-work", "occ_group5_Education",
+      # pay
+      "pay"
+      ))) %>% 
+  filter(!is.na(variable)) %>%
+  arrange(variable) %>% 
+  mutate(variable = factor(variable, labels = c(
+      # jactiv5
+      "Activity - Employee", "Activity - Self-employed", "Activity - Unemployed", "Activity - in Education",  "Activity - Inactive",
+      # occ
+       "Occupation - High-paying", "Occupation - Middling", "Occupation - Low-paying",
+      "Occupation - Out-of-work", "Occupation - in Education",
+      # pay
+      "Pay"
+      
+    ))) %>% 
+  mutate_at(vars(NCDS58_p1_mean:BCS70_p3_sd), ~ sprintf("%.2f", .))
+
+list.table$stats$cohort0 %>% 
+  group_by(cohort, period) %>% 
+  count()
+
+list.table$stats$cohort1 %>% 
+  
+  kable(format = "latex", booktabs = TRUE, linesep = "", escape = FALSE, 
+        align = c("lrrrrrrrrrrrrrrrr"),
+        col.names = c("Variable", rep(c("Mean", "SD"), 4))) %>%
+  add_header_above(c("", "First period" = 2, "Second period" = 2,
+                     "First period" = 2, "Second period" = 2), escape = F) %>%  
+  add_header_above(c("", "NCDS58 - N = 6780" = 4, "BCS70 - N = 7992" = 4), escape = F) %>%  
+  
+  writeLines(., con = file.path(loc_tabular, "stat-cohper.tex"), sep = "\n")
+  
+
+```
+
+## Parental income
+
+## Location
+
+```{r}
+list.table$stats$location1 = location %>%
+  subset(id %in% df.wide$id) %>% 
+  mutate(cohort = factor(substr(id, 1, 1), levels = c("N", "B"), labels = c("NCDS58", "BCS70"))) %>% 
+  subset(age %in% c(23, 26, 42) & region %in% location_names) %>% 
+  select(cohort, id, age, region) %>%
+  count(cohort, age, region, name = "n") %>% 
+  add_count(cohort, age, wt = n, name = "N") %>% 
+  mutate(prop = round(n/N*100,1)) %>% 
+  setDT %>% 
+  dcast(region ~ cohort + age, value.var = "prop")
+
+list.table$stats$location1 %>% 
+  
+  kable(format = "latex", booktabs = TRUE, linesep = "", escape = FALSE, 
+        align = c("lrrrr"),
+        col.names = c("Region", "Age 23", "Age 42", "Age 26", "Age 42")) %>%
+  add_header_above(c("", "NCDS58" = 2, "BCS70" = 2), escape = F) %>%  
+  
+  writeLines(., con = file.path(loc_tabular, "stat-location.tex"), sep = "\n")
+```
+
+```{r}
+# Share of people who stayed in the same region
+list.table$stats$location2 = location %>%
+  subset(id %in% df.wide$id) %>% 
+  mutate(cohort = factor(substr(id, 1, 1), levels = c("N", "B"), labels = c("NCDS58", "BCS70"))) %>% 
+  subset(age %in% c(16, 23, 26, 42) & region %in% location_names) %>% 
+  mutate(period = factor(age, labels = c("p0", "p1", "p1", "p2"))) %>% 
+  setDT %>% dcast(cohort + id ~ period, value.var = "region") %>% 
+  mutate(same_p0p1 = ifelse(p0 == p1, "Same", "Moved"),
+         same_p0p2 = ifelse(p0 == p2, "Same", "Moved"),)
+
+list.table$stats$location2 %>% 
+  subset(!is.na(p0) & !is.na(p1)) %>% 
+  count(cohort, same_p0p1) %>% 
+  add_count(cohort, wt = n, name = "N") %>% 
+  mutate(prop = n/N*100)
+```
+
+
+## Child pay
+
+```{r}
+## Average pay by occupation
+list.table$pay0 = df.long %>% 
+  select(cohort, id, sex, occ_group4, period, pay) %>% 
+  subset(period %in% c("p1", "p3") & occ_group4 != "Out-of-work") %>%
+  subset(pay < 300 & pay > 1) %>%
+  filter(complete.cases(.)) %>% 
+  group_by(cohort, occ_group4, period) %>% 
+  summarise_at(vars("pay"), list(~ mean(.), ~ sd(.), ~ n())) %>% 
+  mutate(
+    se = sd/sqrt(n),
+    ci_low = mean - 1.96*se,
+    ci_high = mean + 1.96*se,
+  ) %>% ungroup
+```
+
+
+```{r}
+## Figure
+list.graph$pay$core = list.table$pay0 %>% 
+  
+  ggplot(aes(x = occ_group4, y = mean, color = cohort, group = cohort)) +
+  geom_errorbar(aes(ymin = ci_low, ymax = ci_high), width=.1) +
+  geom_point() + geom_line() +
+  facet_grid(. ~ period,
+    labeller = labeller(period = c("p1" = "First period", "p3" = "Second period"))) +
+  theme_bw() +
+  labs(x = "Occupation", y = "Average weekly pay (in 1970£)", 
+       title = element_blank(), color = "Cohort")
+  
+# Paper version
+list.graph$polarize$BCSpay$paper = list.graph$pay$core +
+  
+  theme(legend.position = "right") +
+  scale_color_grey(start = .5, end = 0)
+  ggsave(file.path(loc_graphic, "stat-pay.png"), width = 7, height = 7/2)
+  
+# Color version
+list.graph$polarize$BCSpay$color = list.graph$pay$core +
+  
+  theme(legend.position = "bottom") +
+  scale_color_manual(values = brewer.pal(8, "Set2")[c(1,2)])
+  ggsave(file.path(loc_graphic, "stat-pay-color.png"), width = 7, height = 7/2)
+```
+
+
+```{r}
+## Table
+list.table$pay1 = list.table$pay0 %>% 
+  select(cohort, occ_group4, period, mean, se) %>% setDT %>% 
+  melt(id.vars = c("cohort", "occ_group4", "period")) %>% 
+  mutate(value = sprintf("%.2f", value) %>% 
+           ifelse(variable == "se", paste0("(", ., ")"), .),
+         occ_group4 = factor(occ_group4, 
+                             levels = c("High-paying", "Middling", "Low-paying"))) %>% 
+  arrange(cohort, occ_group4, period) %>% 
+  dcast(occ_group4 + variable ~ period + cohort, value.var = "value") %>% 
+  mutate(growth_NCDS58 = (as.numeric(p3_NCDS58)/as.numeric(p1_NCDS58)-1)*100/(42-23),
+         growth_BCS70 = (as.numeric(p3_BCS70)/as.numeric(p1_BCS70)-1)*100/(42-26),) %>% 
+  mutate_at(vars(starts_with("growth")), ~ sprintf("%.2f", .)) %>% 
+  mutate_at(vars(occ_group4, starts_with("growth")), 
+            ~ ifelse(variable == "se", NA, as.character(.))) %>% 
+  select(-variable)
+
+# Relative wages
+# High / Mid
+relwage.HM <- sprintf("%.2f", as.numeric(list.table$pay1[1, c(2:5)])/as.numeric(list.table$pay1[3, c(2:5)]))
+relwage.HM <- paste0(c("High/Mid", relwage.HM, "", "\\\\"), collapse = " & ")
+# Mid / Low
+relwage.ML <- sprintf("%.2f", as.numeric(list.table$pay1[3, c(2:5)])/as.numeric(list.table$pay1[5, c(2:5)]))
+relwage.ML <- paste0(c("Mid/Low", relwage.ML, "", "\\\\"), collapse = " & ")
+
+# Write table (LaTeX format)
+list.table$pay2 = list.table$pay1 %>%
+  kable(format = "latex", booktabs = TRUE, linesep = "", escape = FALSE,
+    col.names = c("Occupation", rep(c("\\multicolumn{1}{c}{NCDS58}", "\\multicolumn{1}{c}{BCS70}"), 3))) %>% 
+  add_header_above(c("", "First period" = 2, "Second period" = 2, "Annual growth (in %)" = 2)) %>%  
+  strsplit("\n") %>% 
+  unlist %>% 
+  .[-c(1,2, 14,15)] %>% 
+  c("\\begin{tabular}{l D{.}{.}{3.3} D{.}{.}{3.3} D{.}{.}{3.3} D{.}{.}{3.3} D{.}{.}{3.3} D{.}{.}{3.3}}", .) %>% 
+    c(., "\\midrule", "\\multicolumn{7}{c}{Relative pay}\\\\", "\\midrule",
+      relwage.HM, relwage.ML, "\\bottomrule", "\\end{tabular}") %>% 
+  writeLines(., con = file.path(loc_tabular, "stat-pay.tex"), sep = "\n")
+```
+## Education (Parents)
+
+**Parents education**
+
+```{r stat-educ-parents, fig.cap='Parental education distribution', out.width='80%', fig.width = 7, fig.asp = .5, fig.align='center', dpi = 200}
+## Parental education distribution
+df.educ %>% 
+  select(cohort, id, father = educ_left_father, mother = educ_left_mother) %>% 
+  setDT %>% melt(id.vars = c("cohort", "id"), variable.name = "parent", value.name = "age") %>%
+  filter(!is.na(age)) %>% 
+  mutate(age = factor(age)) %>% 
+  add_count(cohort, parent, name = "n_coh_par") %>% 
+  add_count(cohort, parent, age, name = "n") %>% 
+  select(cohort, parent, age, n, n_coh_par) %>% unique() %>% 
+  mutate(prop = n/n_coh_par*100) %>% 
+  
+  ggplot(aes(x = age, y = prop, fill = cohort)) +
+  geom_bar(alpha = .8, position = position_dodge(), stat = "identity") +
+  facet_wrap(parent ~ ., labeller = as_labeller(c("father" = "Father", "mother" = "Mother"))) +
+  theme_bw() +
+  scale_fill_grey(start = .5, end = 0) +
+  labs(x = "Age groups", y = "Proportion (in percent)", 
+       title = element_blank(), fill = "Cohort") +
+  theme(legend.position = "right", axis.text.x = element_text(angle = 45, hjust = 1))
+  ggsave(file.path(loc_graphic, "stat-educ-parents.png"), width = 7, height = 7/2)
+```
+
+## Education (Child)
+
+```{r stat-educ-child-long, fig.cap='Child education distribution (11 categories)', out.width='80%', fig.width = 7, fig.asp = .5, fig.align='center', dpi = 200}
+## Child education distribution (11 categories)
+df.educ %>% 
+  select(cohort, id, sex, educ) %>%
+  add_count(cohort, name = "n_cohort") %>% 
+  add_count(cohort, educ, name = "n") %>% 
+  select(cohort, educ, n, n_cohort) %>% unique() %>% 
+  mutate(prop = n/n_cohort*100) %>% 
+  
+  ggplot(aes(x = educ, y = prop, fill = cohort)) +
+  geom_bar(alpha = .8, position = position_dodge(), stat = "identity") +
+  scale_fill_grey(start = .5, end = 0) +
+  scale_x_continuous(breaks = c(0:10)) +
+  labs(x = "Education (in category)", y = "Proportion (in percent)", 
+       title = element_blank(), fill = "Cohort") +
+  theme_bw() +
+  theme(legend.position = "right")
+  ggsave(file.path(loc_graphic, "stat-educ-child-long.png"), width = 7, height = 7/2)
+```
+
+```{r stat-educ-child-short, fig.cap='Child education distribution', out.width='80%', fig.width = 7, fig.asp = .5, fig.align='center', dpi = 200}
+## Education distribution
+df.educ %>% 
+  select(cohort, id, sex, educ) %>%
+  mutate(educ = factor(educ, 
+    labels = c(rep("Secondary", 7), "Sub degree", rep("Degree", 2), "Higher degree"))) %>% 
+  add_count(cohort, name = "n_cohort") %>% 
+  add_count(cohort, educ, name = "n") %>% 
+  select(cohort, educ, n, n_cohort) %>% unique() %>% 
+  mutate(prop = n/n_cohort*100) %>% 
+  
+  ggplot(aes(x = educ, y = prop, fill = cohort)) +
+  geom_bar(alpha = .8, position = position_dodge(), stat = "identity") +
+  scale_fill_grey(start = .5, end = 0) +
+  theme_bw() +
+  theme(legend.position = "right") +
+  labs(x = "Education (in category)", y = "Proportion (in percent)",
+       title = element_blank(), fill = "Cohort")
+  ggsave(file.path(loc_graphic, "stat-educ-child-short.png"), width = 7, height = 7/2)
+```
+
+```{r}
+## Average education by occupation
+list.table$educ0 = df.long %>% 
+  select(cohort, id, sex, occ_group5, period, educ_PIR) %>% 
+  subset(period %in% c("p1", "p3")) %>%
+  filter(complete.cases(.)) %>% 
+  group_by(cohort, occ_group5, period) %>% 
+  summarise_at(vars("educ_PIR"), list(~ mean(.), ~ sd(.), ~n())) %>% 
+  mutate(
+    se = sd/sqrt(n),
+    ci_low = mean - 1.96*se,
+    ci_high = mean + 1.96*se,
+  ) %>% ungroup
+```
+
+```{r}
+## Figure
+list.table$educ0 %>% 
+  mutate(occ_group5 = factor(occ_group5, labels = c("Out", "Educ", "Low", "Mid", "High"))) %>% 
+  
+  ggplot(aes(x = occ_group5, y = mean, color = cohort, group = cohort)) +
+  geom_errorbar(aes(ymin = ci_low, ymax = ci_high), width=.1) +
+  geom_point() + geom_line() +
+  facet_grid(. ~ period,
+    labeller = labeller(period = c("p1" = "First period", "p3" = "Second period"))) +
+  scale_color_grey(start = .5, end = 0) +
+  theme_bw() +
+  theme(legend.position = "right") +
+  labs(x = "Occupation", y = "Average eduction (in PIR)",
+       title = element_blank(), color = "Cohort")
+  ggsave(file.path(loc_graphic, "stat-educ.png"), width = 7, height = 7/2)
+```
+
+```{r}
+## Table
+list.table$educ1 = list.table$educ0 %>% 
+  select(cohort, occ_group5, period, mean, se) %>% setDT %>% 
+  melt(id.vars = c("cohort", "occ_group5", "period")) %>% 
+  mutate(value = sprintf("%.2f", value) %>% 
+           ifelse(variable == "se", paste0("(", ., ")"), .)) %>% 
+  arrange(cohort, occ_group5, period) %>% 
+  dcast(occ_group5 + variable ~ period + cohort, value.var = "value") %>% 
+  mutate(occ_group5 = ifelse(variable == "se", NA, as.character(occ_group5))) %>% 
+  select(-variable)
+
+# Write table (LaTeX format)
+list.table$educ2 = list.table$educ1 %>% 
+  kable(format = "latex", booktabs = TRUE, linesep = "", escape = FALSE,
+    col.names = c("Occupation", rep(c("\\multicolumn{1}{c}{NCDS58}", "\\multicolumn{1}{c}{BCS70}"), 2))) %>% 
+  add_header_above(c("", "First period" = 2, "Second period" = 2)) %>%  
+  strsplit("\n") %>% 
+  unlist %>% 
+  .[-c(1,2)] %>% 
+  c("\\begin{tabular}{l D{.}{.}{3.3} D{.}{.}{3.3} D{.}{.}{3.3} D{.}{.}{3.3}}", .) %>% 
+  writeLines(., con = file.path(loc_tabular, "stat-educ.tex"), sep = "\n")
+```
+
+```{r}
+## Average education by occupation
+list.table$educ0 = df.long %>% 
+  select(cohort, id, sex, occ_group5, period, educ_PIR) %>% 
+  subset(period %in% c("p1", "p3")) %>%
+  filter(complete.cases(.)) %>% 
+  group_by(cohort, occ_group5, period) %>% 
+  summarise_at(vars("educ_PIR"), list(~ mean(.), ~ sd(.), ~n())) %>% 
+  mutate(
+    se = sd/sqrt(n),
+    ci_low = mean - 1.96*se,
+    ci_high = mean + 1.96*se,
+  ) %>% ungroup
+```
+
+```{r}
+## Table
+list.table$educ1 = list.table$educ0 %>% 
+  select(cohort, occ_group5, period, mean, se) %>% setDT %>% 
+  melt(id.vars = c("cohort", "occ_group5", "period")) %>% 
+  mutate(value = sprintf("%.2f", value) %>% 
+           ifelse(variable == "se", paste0("(", ., ")"), .)) %>% 
+  arrange(cohort, occ_group5, period) %>% 
+  dcast(occ_group5 + variable ~ period + cohort, value.var = "value") %>% 
+  mutate(occ_group5 = ifelse(variable == "se", NA, as.character(occ_group5))) %>% 
+  select(-variable)
+
+# Write table (LaTeX format)
+list.table$educ2 = list.table$educ1 %>% 
+  kable(format = "latex", booktabs = TRUE, linesep = "", escape = FALSE,
+    col.names = c("Occupation", rep(c("\\multicolumn{1}{c}{NCDS58}", "\\multicolumn{1}{c}{BCS70}"), 2))) %>% 
+  add_header_above(c("", "First period" = 2, "Second period" = 2)) %>%  
+  strsplit("\n") %>% 
+  unlist %>% 
+  .[-c(1,2)] %>% 
+  c("\\begin{tabular}{l D{.}{.}{3.3} D{.}{.}{3.3} D{.}{.}{3.3} D{.}{.}{3.3}}", .) %>% 
+  writeLines(., con = file.path(loc_tabular, "stat-educ.tex"), sep = "\n")
+```
+
+## Occupations
+
+```{r stat-occ, fig.cap='Occupation distributions at both periods', out.width='80%', fig.width = 7, fig.asp = .66, fig.align='center', dpi = 200}
+# Core
+list.graph$stat$occ$core = df.wide %>% 
+  
+  select(cohort, id, occ_group4_p1, occ_group4_p3) %>% setDT %>% 
+  melt(id.vars = c("cohort", "id"), variable.name = "period", 
+       value.name = "occ_group", value.var = c("occ_group4_p1", "occ_group4_p3")) %>% 
+  mutate(period = factor(period, labels = c("First period", "Second period")),
+    occ_group = factor(occ_group,
+      levels = c("Out-of-work", "Low-paying", "Middling", "High-paying"))) %>% 
+  count(cohort, period, occ_group, name = "n") %>% 
+  add_count(cohort, period, wt = n, name = "N") %>% 
+  mutate(prop = n/N*100) %>% 
+  select(cohort, period, occ_group, n, N, prop) %>% 
+  
+  ggplot(aes(x = occ_group, y = prop, fill = cohort)) +
+  geom_bar(stat = "identity", alpha = .8, position = position_dodge()) +
+  facet_grid(. ~ period) +
+  labs(x = "Occupation", y = "Proportion (in percent)", fill = "Cohort", 
+       title = element_blank()) +
+  theme_bw()
+
+# Paper version
+list.graph$stat$occ$paper = list.graph$stat$occ$core +
+  
+  scale_fill_grey(start = .5, end = 0) +
+  theme(legend.position = "right")
+  ggsave(file.path(loc_graphic, "stat-occ.png"), width = 8, height = 8/2)
+  
+# Color version
+list.graph$stat$occ$color = list.graph$stat$occ$core +
+  
+  scale_fill_manual(values = alpha(brewer.pal(8, "Set2"), .7)) +
+  theme(legend.position = "right")
+  ggsave(file.path(loc_graphic, "stat-occ-color.png"), width = 8, height = 8/2)
+```
+
+
+```{r stat-occsex, fig.cap='Occupation distributions at both periods', out.width='80%', fig.width = 7, fig.asp = .66, fig.align='center', dpi = 200}
+# Core version
+list.graph$stat$occsex$core = df.wide %>% 
+  
+  select(cohort, id, sex, occ_group4_p1, occ_group4_p3) %>% setDT %>% 
+  melt(id.vars = c("cohort", "id", "sex"), variable.name = "period", 
+       value.name = "occ_group", value.var = c("occ_group4_p1", "occ_group4_p3")) %>% 
+  mutate(period = factor(period, labels = c("First period", "Second period")),
+    occ_group = factor(occ_group,
+      levels = c("Out-of-work", "Low-paying", "Middling", "High-paying"))) %>% 
+  count(cohort, period, sex, occ_group, name = "n") %>% 
+  add_count(cohort, period, sex, wt = n, name = "N") %>% 
+  mutate(prop = n/N*100) %>% 
+  select(cohort, period, sex, occ_group, n, N, prop) %>% 
+  
+  ggplot(aes(x = occ_group, y = prop, fill = cohort)) +
+  geom_bar(stat = "identity", alpha = .8, position = position_dodge()) +
+  facet_grid(sex ~ period) +
+  labs(x = "Occupation", y = "Proportion (in percent)", fill = "Cohort", title = element_blank()) +
+  theme_bw()
+
+# Paper version
+list.graph$stat$occsex$paper = list.graph$stat$occsex$core +
+  
+  scale_fill_grey(start = .5, end = 0) +
+  theme(legend.position = "right")
+  ggsave(file.path(loc_graphic, "stat-occsex.png"), width = 7, height = 7/2)
+  
+# Color version
+list.graph$stat$occsex$color = list.graph$stat$occsex$core +
+  
+  scale_fill_manual(values = alpha(brewer.pal(8, "Set2"), .7)) +
+  theme(legend.position = "right")
+  ggsave(file.path(loc_graphic, "stat-occsex-color.png"), width = 7, height = 7/2)
+```
+
+```{r stat-occ, fig.cap='Occupation distributions at both periods (LFS)', out.width='80%', fig.width = 7, fig.asp = .66, fig.align='center', dpi = 200}
+# Core
+list.graph$stat$occLFS$core = lfs2 %>%
+  mutate(cohper = case_when(
+    year == 1981 & age == 23 ~ "NCDS58_p1",
+    year == 2000 & age == 42 ~ "NCDS58_p3",
+    year == 1996 & age == 26 ~ "BCS70_p1",
+    year == 2012 & age == 42 ~ "BCS70_p3"
+  )) %>% 
+  subset(!is.na(cohper)) %>% 
+  group_by(cohper, occ_group) %>% 
+  count() %>% 
+  group_by(cohper) %>% 
+  mutate(prop = n/sum(n)*100) %>% 
+  separate(cohper, into = c("cohort", "period"), sep = "_") %>% 
+  mutate(cohort = factor(cohort, levels = c("NCDS58", "BCS70")),
+         period = factor(period, levels = c("p1", "p3"),
+                         labels = c("First period", "Second period"))) %>%
+  
+  ggplot(aes(x = occ_group, y = prop, fill = cohort)) +
+  geom_bar(stat = "identity", alpha = .8, position = position_dodge()) +
+  facet_grid(. ~ period) +
+  labs(x = "Occupation", y = "Proportion (in percent)", fill = "Cohort", 
+       title = element_blank()) +
+  theme_bw()
+
+# Paper version
+list.graph$stat$occLFS$paper = list.graph$stat$occLFS$core +
+  
+  scale_fill_grey(start = .5, end = 0) +
+  theme(legend.position = "right")
+  ggsave(file.path(loc_graphic, "stat-occLFS.png"), width = 8, height = 8/2)
+  
+# Color version
+list.graph$stat$occLFS$color = list.graph$stat$occLFS$core +
+  
+  scale_fill_manual(values = alpha(brewer.pal(8, "Set2"), .7)) +
+  theme(legend.position = "right")
+  ggsave(file.path(loc_graphic, "stat-occLFS-color.png"), width = 8, height = 8/2)
+```
+
+## Counterfactual decomposition [OLD]
+
+**Dataset**
+
+```{r}
+# Dataframe in wide format
+df.proba = df.long %>% 
+  select(id, cohort, period, occ_group5, occ_group4) %>% 
+  setDT %>% melt(id.vars = c("id", "cohort", "period")) %>% 
+  dcast(id + cohort ~ variable + period, value.var = "value") %>% 
+  ungroup %>% 
+  mutate_at(vars(starts_with("occ_group")), 
+    ~ factor(., 
+    levels = c("Out-of-work", "Education", "Low-paying", "Middling", "High-paying"),
+    labels = c("Out-of-work", "in-Education", "Low-paying", "Middling", "High-paying")))
+
+# Empty list
+list.proba = list()
+```
+
+**Function**
+
+```{r}
+## Function to compute absolute and conditional probabilities
+ComputeProba = function(df, occ_group1, occ_group2 = NULL){
+  
+  if(!is.null(occ_group2)){ # Conditional probabilities
+    df1 = df %>% 
+      rename("occ_group1" = occ_group1, "occ_group2" = occ_group2) %>% 
+      add_count(cohort, occ_group1, occ_group2, name = "n") %>% 
+      add_count(cohort, occ_group1, name = "N") %>% 
+      select(cohort, occ_group1, occ_group2, n, N) %>% unique %>% 
+      mutate(prop = n/N) %>% select(cohort, occ_group1, occ_group2, prop) %>% setDT %>% 
+      dcast(occ_group1 + occ_group2 ~ cohort, value.var = "prop", fill  = 0) %>% 
+      mutate(delta = BCS70-NCDS58) %>% setDT %>% 
+      melt(id.vars = c("occ_group1", "occ_group2")) %>% 
+      mutate(variable = factor(variable, levels = c("BCS70", "NCDS58", "delta"))) %>% 
+      setDT %>%  dcast(occ_group1 ~ variable + occ_group2, value.var = "value")
+    
+  } else { # Absolute probabilities
+    df1 = df %>% 
+      rename("occ_group1" = occ_group1) %>% 
+      add_count(cohort, occ_group1, name = "n") %>%
+      add_count(cohort, name = "N") %>%
+      select(cohort, occ_group1, n, N) %>% unique %>%
+      mutate(prop = n/N) %>% select(cohort, occ_group1, prop)  %>% setDT %>%
+      dcast(occ_group1 ~ cohort, value.var = "prop", fill = 0) %>%
+      mutate(delta = BCS70-NCDS58) %>% select(occ_group1, BCS70, NCDS58, delta)
+  }
+  return(df1)
+}
+```
+
+**4-group specification**
+
+```{r}
+## Specification: 4-group occupations
+# Compute
+list.proba$group4$p1 = ComputeProba(df.proba, occ_group1 = "occ_group4_p1") 
+list.proba$group4$p3 = ComputeProba(df.proba, occ_group1 = "occ_group4_p3") 
+list.proba$group4$cdt = ComputeProba(df.proba, 
+  occ_group1 = "occ_group4_p1", occ_group2 = "occ_group4_p3")
+# Absolute probabilities (period 1 and period 3)
+list.table$proba$group4$absolute = merge(list.proba$group4$p1, 
+  list.proba$group4$p3, by = "occ_group1", suffixes = c("_p1", "_p3")) %>%
+      mutate_if(is.numeric, function(x){round(x*100,1)})
+# Conditional probabilities (period 3 | period 1)
+list.table$proba$group4$conditional = list.proba$group4$cdt %>%
+      mutate_if(is.numeric, function(x){round(x*100,1)})
+
+## Group 4 - Absolute
+# Write table (LaTeX format)
+list.table$proba$group4$absolute %>% 
+  kable(format = "latex", booktabs = TRUE, linesep = "", escape = FALSE,
+        col.names = c("Occupation", rep(c("BCS70", "NCDS58", "$\\Delta$"), 2))) %>% 
+  add_header_above(c("", "First period" = 3, "Second period" = 3)) %>% 
+  writeLines(., con = "_tabular/proba-group4-abs.tex", sep = "\n")
+
+## Group 4 - Conditional
+# Write table (LaTeX format)
+list.table$proba$group4$conditional %>% 
+  kable(format = "latex", booktabs = TRUE, linesep = "", escape = FALSE,
+        col.names = c("Occupation", rep(c("Out", "Low", "Mid", "High"), 3))) %>% 
+  add_header_above(c("", "BCS70" = 4, "NCDS58" = 4, "$\\\\Delta$" = 4), escape = FALSE) %>% 
+  writeLines(., con = "_tabular/proba-group4-cdt.tex", sep = "\n")
+
+## Group 4 - Conditional [SHORT]
+# Write table (LaTeX format)
+list.table$proba$group4$conditional %>% 
+  select(-starts_with("delta")) %>% 
+  kable(format = "latex", booktabs = TRUE, linesep = "", escape = FALSE,
+        col.names = c("Occupation", rep(c("Out", "Low", "Mid", "High"), 2))) %>% 
+  add_header_above(c("", "BCS70" = 4, "NCDS58" = 4), escape = FALSE) %>% 
+  writeLines(., con = "_tabular/proba-group4-cdt-short.tex", sep = "\n")
+
+```
+
+**5-group specification**
+
+```{r}
+## Specification: 5-group occupations
+# Compute
+list.proba$group5$p1 = ComputeProba(df.proba, occ_group1 = "occ_group5_p1") 
+list.proba$group5$p3 = ComputeProba(df.proba, occ_group1 = "occ_group5_p3") 
+list.proba$group5$cdt = ComputeProba(df.proba, 
+  occ_group1 = "occ_group5_p1", occ_group2 = "occ_group5_p3")
+# Absolute probabilities (period 1 and period 3)
+list.table$proba$group5$absolute =  merge(list.proba$group5$p1, 
+  list.proba$group5$p3, by = "occ_group1", suffixes = c("_p1", "_p3")) %>%
+      mutate_if(is.numeric, function(x){round(x*100,1)})
+# Conditional probabilities (period 3 | period 1)
+list.table$proba$group5$conditional = list.proba$group5$cdt %>%
+      mutate_if(is.numeric, function(x){round(x*100,1)})
+
+# Write table (LaTeX format)
+list.table$proba$group5$absolute %>% 
+  kable(format = "latex", booktabs = TRUE, linesep = "", escape = FALSE,
+        col.names = c("Occupation", rep(c("BCS70", "NCDS58", "$\\Delta$"), 2))) %>% 
+  add_header_above(c("", "First period" = 3, "Second period" = 3)) %>% 
+  writeLines(., con = "_tabular/proba-group5-abs.tex", sep = "\n")
+
+# Write table (LaTeX format)
+list.table$proba$group5$conditional %>% 
+  kable(format = "latex", booktabs = TRUE, linesep = "", escape = FALSE,
+        col.names = c("Occupation", rep(c("Out", "Educ", "Low", "Mid", "High"), 3))) %>% 
+  add_header_above(c("", "BCS70" = 5, "NCDS58" = 5, "$\\\\Delta$" = 5), escape = FALSE) %>% 
+  writeLines(., con = "_tabular/proba-group5-cdt.tex", sep = "\n")
+
+## Group 5 - Conditional [SHORT]
+# Write table (LaTeX format)
+list.table$proba$group5$conditional %>% 
+  select(-starts_with("delta")) %>% 
+  kable(format = "latex", booktabs = TRUE, linesep = "", escape = FALSE,
+        col.names = c("Occupation", rep(c("Out", "Educ", "Low", "Mid", "High"), 2))) %>% 
+  add_header_above(c("", "BCS70" = 5, "NCDS58" = 5), escape = FALSE) %>% 
+  writeLines(., con = "_tabular/proba-group5-cdt-short.tex", sep = "\n")
+```
+
+# Job polarization
+
+## In Cohort data
+
+```{r}
+# Dataframe for polarization in cohort data
+df.pol = df.long %>% 
+  select(cohort, id, period, occ_group4, isco88, pay) %>% 
+  mutate(occ_group4 = factor(occ_group4, 
+    levels = c("Low-paying", "Middling", "High-paying"))) %>% 
+  subset(pay < 300 & pay > 1) %>% filter(complete.cases(.)) %>% 
+  group_by(cohort, period, occ_group4, isco88) %>% 
+  summarise(pay = mean(pay), n = n(), .groups = "keep") %>% 
+  group_by(cohort, period) %>% add_count(wt = n, name = "N") %>% ungroup %>% 
+  mutate(prop = n/N*100) %>% 
+  setDT %>% dcast(period + occ_group4 + isco88 ~ cohort, value.var = c("pay", "prop")) %>%
+  mutate(prop_delta = prop_BCS70 - prop_NCDS58, pay_delta = (pay_BCS70/pay_NCDS58-1)*100) %>% 
+  mutate(isco88 = factor(isco88,
+    levels = c(51, 52, 91, 92, 93, # Low
+               41, 42, 61, 71, 72, 73, 74, 81, 82, 83, # Mid
+               11, 12, 13, 21, 22, 23, 24, 31, 32, 33, 34)))
+```
+
+```{r}
+## Change in the probability of first-period occupation and average weekly pay
+# Core version
+list.graph$polarize$BCSpay$p1$core = df.pol %>% subset(period == "p1") %>% 
+  
+  ggplot(aes(x = pay_BCS70, y = prop_delta, label = isco88)) +
+  geom_point(aes(shape = occ_group4, color = occ_group4), size = 2) +
+  geom_text_repel(aes(color = occ_group4), show.legend = F)+
+  geom_smooth(method = "lm", formula = y ~ poly(x,2), se = F, color = "black") +
+  labs(x = "Average weekly pay in BCS70 (in 1970£)",
+       y = "Change in the probability (in pp.)",
+       title = element_blank(), color = "Occupation", shape = "Occupation") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+# Paper version
+list.graph$polarize$BCSpay$p1$paper = list.graph$polarize$BCSpay$p1$core +
+  scale_color_grey(start = .5, end = 0)
+  ggsave(file.path(loc_graphic, "polarize-BCSpay-p1.png"), width = 7, height = 7/1.5)
+# Color version
+list.graph$polarize$BCSpay$p1$color = list.graph$polarize$BCSpay$p1$core +
+  scale_color_manual(values = alpha(rev(brewer.pal(3, "Set1")), alpha = 1))
+  ggsave(file.path(loc_graphic, "polarize-BCSpay-p1-color.png"), width = 7, height = 7/1.5)
+
+## Change in the probability of second-period occupation and average weekly pay
+# Core version
+list.graph$polarize$BCSpay$p3$core = df.pol %>% subset(period == "p3") %>% 
+  
+  ggplot(aes(x = pay_BCS70, y = prop_delta, label = isco88)) +
+  geom_point(aes(shape = occ_group4, color = occ_group4), size = 2) +
+  geom_text_repel(aes(color = occ_group4), show.legend = F,  max.overlaps = 200)+
+  geom_smooth(method = "lm", formula = y ~ poly(x,2), se = F, color = "black") +
+  labs(x = "Average weekly pay in BCS70 cohort (in 1970£)",
+       y = "Change in the probability (in pp.)",
+       title = element_blank(), color = "Occupation", shape = "Occupation") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+# Paper version
+list.graph$polarize$BCSpay$p3$paper = list.graph$polarize$BCSpay$p3$core +
+  scale_color_grey(start = .5, end = 0)
+  ggsave(file.path(loc_graphic, "polarize-BCSpay-p3.png"), width = 7, height = 7/1.5)
+# Color version
+list.graph$polarize$BCSpay$p3$color = list.graph$polarize$BCSpay$p3$core +
+  scale_color_manual(values = alpha(rev(brewer.pal(3, "Set1")), alpha = 1))
+  ggsave(file.path(loc_graphic, "polarize-BCSpay-p3-color.png"), width = 7, height = 7/1.5)
+# Preview
+list.graph$polarize$BCSpay$p1$color
+```
+
+
+
+```{r}
+## Change in the probability of first-period ISCO-88 occupations
+# Core version
+list.graph$polarize$isco88$p1$core = subset(df.pol, period == "p1") %>% 
+  
+  ggplot(aes(x = isco88, y = prop_delta, fill = occ_group4)) +
+  geom_bar(stat = "identity") +
+  labs(x = "ISCO-88 occupation", y = "Change in the probability (in pp.)",
+       title = element_blank(), fill = "Occupation") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+# Paper version
+list.graph$polarize$isco88$p1$paper = list.graph$polarize$isco88$p1$core +
+  scale_fill_grey(start = .5, end = 0)
+  ggsave(file.path(loc_graphic, "polarize-isco88-p1.png"), width = 7, height = 7/1.5)
+# Color version
+list.graph$polarize$isco88$p1$color = list.graph$polarize$isco88$p1$core +
+  scale_fill_manual(values = alpha(rev(brewer.pal(3, "Set1")), alpha = .7))
+  ggsave(file.path(loc_graphic, "polarize-isco88-p1-color.png"), width = 7, height = 7/1.5)
+
+## Change in the probability of second-period ISCO-88 occupations
+# Core version
+list.graph$polarize$isco88$p3$core = subset(df.pol, period == "p3") %>% 
+  
+  ggplot(aes(x = isco88, y = prop_delta, fill = occ_group4)) +
+  geom_bar(stat = "identity") +
+  labs(x = "ISCO-88 occupation", y = "Change in the probability (in pp.)",
+       title = element_blank(), fill = "Occupation") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+# Paper version
+list.graph$polarize$isco88$p3$paper = list.graph$polarize$isco88$p3$core +
+  scale_fill_grey(start = .5, end = 0)
+  ggsave(file.path(loc_graphic, "polarize-isco88-p3.png"), width = 7, height = 7/1.5)
+# Color version
+list.graph$polarize$isco88$p3$color = list.graph$polarize$isco88$p3$core +
+  scale_fill_manual(values = alpha(rev(brewer.pal(3, "Set1")), alpha = .7))
+  ggsave(file.path(loc_graphic, "polarize-isco88-p3-color.png"), width = 7, height = 7/1.5)
+## Change in the probability of both period ISCO-88 occupations
+# Core version
+list.graph$polarize$isco88$both$core = df.pol %>% 
+  
+  ggplot(aes(x = isco88, y = prop_delta, fill = occ_group4)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(period ~ ., ncol = 1,
+    labeller = labeller(period = c("p1" = "First period", "p3" = "Second period"))) +
+  labs(x = "ISCO-88 occupation", y = "Change in the probability (in pp.)",
+       title = element_blank(), fill = "Occupation") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+# Paper version
+list.graph$polarize$isco88$both$paper = list.graph$polarize$isco88$both$core +
+  scale_fill_grey(start = .5, end = 0)
+  ggsave(file.path(loc_graphic, "polarize-isco88-both.png"), width = 7, height = 7/1.5)
+# Color version
+list.graph$polarize$isco88$both$color = list.graph$polarize$isco88$both$core +
+  scale_fill_manual(values = alpha(rev(brewer.pal(3, "Set1")), alpha = .7))
+  ggsave(file.path(loc_graphic, "polarize-isco88-both-color.png"), width = 7, height = 7/1.5)
+# Preview
+list.graph$polarize$isco88$both$color
+```
+
+## In Labour Force Survey
+
+### New version
+
+```{r}
+# Share of middling with a measure consistent with the IV
+lfs3.new <- lfs2 %>% 
+  subset(age %in% c(25:49)) %>% 
+  subset(!is.na(isco88)) %>% 
+  mutate(isco08 = substr(as.character(isco88), 1,1)) %>% 
+  select(year, location, isco08) %>% 
+  mutate(occ_group = factor(isco08, levels = c(1:3, 4, 6:8, 5, 9),
+                            labels = c(rep("High-paying", 3),
+                                       rep("Middling", 4),
+                                       rep("Low-paying", 2)))) %>% 
+  group_by(year, location, occ_group) %>% 
+  summarize(n = n(), .groups = "keep") %>% 
+  # Share at the occupational group level
+  group_by(year, location) %>%
+  mutate(share = n/sum(n)*100) %>% 
+  ungroup 
+
+```
+
+```{r}
+# Core version
+list.graph$lfs$regional$core = lfs3.new %>% 
+  mutate(occ_group = factor(occ_group, levels = c("High-paying", "Middling", "Low-paying"))) %>% 
+  
+  ggplot(aes(x = year, y  = share)) +
+  geom_vline(xintercept = c(1992, 2004), linetype = "dotted") +
+  facet_wrap(. ~ location) +
+  labs(x = "Year", y = "Proportion (in percent)") +
+  theme_bw() +
+  theme(legend.position = c(.75, 0.125), legend.justification = "center",
+        legend.box = "horizontal", panel.spacing = unit(.7, "lines"),
+        legend.key.width = unit(1, 'cm'), #change legend key width
+        legend.title = element_text(size=14), #change legend title font size
+        legend.text = element_text(size=10))
+# Paper version
+list.graph$lfs$regional$color = list.graph$lfs$regional$core +
+  geom_line(aes(linetype = occ_group)) +
+  scale_color_grey(start = 0, end = .5) +
+  labs(linetype = "Occupation")
+  ggsave(file.path(loc_graphic, "lfs-regional.png"), width = 10, height = 10/1.5)
+# Color version
+list.graph$lfs$regional$color = list.graph$lfs$regional$core +
+  geom_line(aes(color = occ_group)) +
+  scale_color_manual(values = alpha(brewer.pal(3, "Set1"), .7)) +
+  labs(color = "Occupation")
+  ggsave(file.path(loc_graphic, "lfs-regional-color.png"), width = 10, height = 10/1.5)
+# Preview
+list.graph$lfs$regional$color
+```
+
+```{r}
+# Core version
+list.graph$lfs$national$core = lfs3.new %>% 
+  
+  group_by(year, occ_group) %>% 
+  summarize(prop = weighted.mean(share, w = n), .groups = "keep") %>% 
+  select(year, occ_group, prop) %>% 
+  mutate(occ_group = factor(occ_group, levels = c("High-paying", "Middling", "Low-paying"))) %>% 
+  
+  ggplot(aes(x = year, y  = prop)) +
+  geom_vline(xintercept = c(1992, 2004), linetype = "dotted") +
+  labs(x = "Year", y = "Proportion (in percent)") +
+  theme_bw() +
+  theme(legend.position = "right")
+# Paper version
+list.graph$lfs$national$paper = list.graph$lfs$national$core +
+  geom_point(aes(shape = occ_group), alpha = .7) +
+  geom_line(aes(group = occ_group)) +
+  labs(shape = "Occupation")
+  ggsave(file.path(loc_graphic, "lfs-national.png"), width = 7, height = 7/2)
+# Color version
+list.graph$lfs$national$color = list.graph$lfs$national$core +
+  geom_point(aes(shape = occ_group, color = occ_group)) +
+  geom_line(aes(color = occ_group)) +
+  scale_color_manual(values = alpha(brewer.pal(3, "Set1"), .7)) +
+  labs(color = "Occupation", shape = "Occupation")
+  ggsave(file.path(loc_graphic, "lfs-national-color.png"), width = 7, height = 7/2)
+```
+
+### Within cohort age range
+
+```{r}
+# Core version
+list.graph$lfs$regional$core =  lfs3 %>% 
+  mutate(occ_group = factor(occ_group, levels = c("High-paying", "Middling", "Low-paying"))) %>% 
+  
+  ggplot(aes(x = year, y  = prop)) +
+  facet_wrap(. ~ location) +
+  labs(x = "Year", y = "Proportion (in percent)") +
+  theme_bw() +
+  theme(legend.position = c(.75, 0.125), legend.justification = "center",
+        legend.box = "horizontal", panel.spacing = unit(.7, "lines"),
+        legend.key.width = unit(1, 'cm'), #change legend key width
+        legend.title = element_text(size=14), #change legend title font size
+        legend.text = element_text(size=10))
+# Paper version
+list.graph$lfs$regional$color = list.graph$lfs$regional$core +
+  geom_line(aes(color = cohort, linetype = occ_group)) +
+  scale_color_grey(start = 0, end = .5) +
+  labs(color = "Cohort", linetype = "Occupation")
+  ggsave(file.path(loc_graphic, "lfs-regional.png"), width = 10, height = 10/1.5)
+# Color version
+list.graph$lfs$regional$color = list.graph$lfs$regional$core +
+  geom_line(aes(color = occ_group, linetype = cohort)) +
+  scale_color_manual(values = alpha(brewer.pal(3, "Set1"), .7)) +
+  labs(color = "Occupation", linetype = "Cohort")
+  ggsave(file.path(loc_graphic, "lfs-regional-color.png"), width = 10, height = 10/1.5)
+# Preview
+list.graph$lfs$regional$color
+```
+
+```{r}
+# Core version
+list.graph$lfs$national$core =  lfs3 %>% 
+  
+  group_by(cohort, year, occ_group) %>% 
+  mutate(prop = weighted.mean(prop, w = n)) %>% 
+  select(cohort, year, occ_group, prop) %>% 
+  mutate(occ_group = factor(occ_group, levels = c("High-paying", "Middling", "Low-paying"))) %>% 
+  
+  ggplot(aes(x = year, y  = prop)) +
+  labs(x = "Year", y = "Proportion (in percent)") +
+  theme_bw() +
+  theme(legend.position = "right")
+# Paper version
+list.graph$lfs$national$paper = list.graph$lfs$national$core +
+  geom_point(aes(shape = cohort), alpha = .7) +
+  geom_line(aes(linetype = occ_group, shape = cohort)) +
+  labs(linetype = "Occupation", shape = "Cohort")
+  ggsave(file.path(loc_graphic, "lfs-national.png"), width = 7, height = 7/2)
+# Color version
+list.graph$lfs$national$color = list.graph$lfs$national$core +
+  geom_point(aes(shape = cohort, color = occ_group)) +
+  geom_line(aes(color = occ_group, linetype = cohort)) +
+  scale_color_manual(values = alpha(brewer.pal(3, "Set1"), .7)) +
+  labs(color = "Occupation", linetype = "Cohort", shape = "Cohort")
+  ggsave(file.path(loc_graphic, "lfs-national-color.png"), width = 7, height = 7/2)
+```
+
+```{r}
+recessions = data.frame(start = c(1979.00, 1990.50	, 2008.25),
+                        end = c(1981.00, 1992.25, 2009.25))
+
+# ukgdp1 %>% 
+#   subset(GDPgrowth < 0)
+
+ukgdp1 %>% 
+  subset(year %in% c(1975:2015)) %>% 
+  
+  ggplot(aes(x = date, y = GDPgrowth)) +
+  geom_hline(yintercept = 0, linetype = "dotted") +
+  geom_line() +
+  geom_rect(data = recessions, inherit.aes = FALSE,
+            aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf),
+            color = "transparent", alpha = .2) +
+  labs(x = "Year", y = "GDP growth rate (in percent)") +
+  theme_bw() +
+  theme(legend.position = "none")
+ggsave(file.path(loc_graphic, "gdp-growth.png"), width = 7, height = 7/2)
+```
+
+```{r}
+# Core version
+list.graph$lfs$national$core = lfs3.all %>% 
+  
+  group_by(cohort, year, occ_group) %>% 
+  mutate(prop = weighted.mean(prop, w = n)) %>% 
+  select(cohort, year, occ_group, prop) %>% 
+  mutate(occ_group = factor(occ_group, 
+    levels = c("Out-of-work", "Low-paying", "Middling", "High-paying"))) %>% 
+  merge(ukgdp1, by = "year") %>%
+  
+  ggplot(aes(x = year, y  = prop)) +
+  geom_rect(data = recessions, inherit.aes = FALSE,
+            aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf),
+            color = "transparent", alpha = .2) +
+  labs(x = "Year", y = "Proportion (in percent)") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+# Paper version
+list.graph$lfs$national$paper = list.graph$lfs$national$core +
+  geom_line(aes(linetype = cohort)) +
+  facet_wrap(. ~ occ_group, nrow = 2) +
+  labs(linetype = "Cohort")
+  ggsave(file.path(loc_graphic, "lfs-national-cycle.png"), width = 7, height = 7/1.5)
+# Color version
+list.graph$lfs$national$color = list.graph$lfs$national$core +
+  geom_line(aes(linetype = cohort, color = occ_group)) +
+  facet_wrap(. ~ occ_group, nrow = 2) +
+  labs(linetype = "Cohort") +
+  scale_color_manual(values = rev(brewer.pal(4, "Set1")), guide = "none")
+  ggsave(file.path(loc_graphic, "lfs-national-cycle-color.png"), width = 7, height = 7/1.5)
+```
+
+
+### Global
+
+```{r}
+# Core version
+list.graph$lfs$national2$core =  lfs2 %>% 
+  
+  count(year, occ_group, name = "n") %>% 
+  add_count(year, wt = n, name = "N") %>% 
+  mutate(prop = n/N*100) %>% 
+  select(year, occ_group, prop) %>% 
+  mutate(occ_group = factor(occ_group, levels = c("High-paying", "Middling", "Low-paying"))) %>% 
+  
+  ggplot(aes(x = year, y  = prop)) +
+  labs(x = "Year", y = "Proportion (in percent)") +
+  theme_bw() +
+  theme(legend.position = "right")
+# Paper version
+list.graph$lfs$national$paper = list.graph$lfs$national2$core +
+  geom_point(aes(shape = occ_group), alpha = .7) +
+  geom_line(aes(linetype = occ_group)) +
+  labs(linetype = "Occupation", shape = "Occupation")
+  ggsave(file.path(loc_graphic, "lfs-national2.png"), width = 7, height = 7/2)
+# Color version
+list.graph$lfs$national$color = list.graph$lfs$national2$core +
+  geom_point(aes(color = occ_group, shape = occ_group)) +
+  geom_line(aes(color = occ_group)) +
+  scale_color_manual(values = alpha(brewer.pal(3, "Set1"), .7)) +
+  labs(color = "Occupation", linetype = "Occupation", shape = "Occupation")
+  ggsave(file.path(loc_graphic, "lfs-national2-color.png"), width = 7, height = 7/2)
+```
+
+### Change
+
+```{r}
+lfs.pol = lfs3 %>% 
+  group_by(cohort, location, occ_group) %>% 
+  summarize_at(vars(prop), list(mean = ~ mean(., na.rm = T))) %>% setDT %>% 
+  melt(id.vars = c("location", "occ_group", "cohort"), variable.name = "metric") %>% 
+  dcast(location + occ_group + metric ~ cohort, value.var = "value") %>% 
+  mutate(delta = BCS70-NCDS58) %>% data.frame %>% 
+  mutate(loc = factor(location, levels = location_names, labels = names(location_names))) %>% 
+  select(loc, location, lfs_occ = occ_group, metric, BCS70, NCDS58, delta) %>% 
+  setDT %>% melt(id.vars = c("loc", "location", "lfs_occ", "metric")) %>% 
+  mutate(type = ifelse(variable == "delta", "change", "level"))
+```
+
+```{r}
+# Core version
+list.graph$lfs$change$core = subset(lfs.pol, variable == "delta") %>% 
+  
+  ggplot(aes(x = loc, y = value, fill = lfs_occ)) +
+  geom_hline(yintercept = 0, linetype = "dotted") +
+  geom_bar(stat = "identity", position = position_dodge2()) +
+  labs(x = "Region", y = "Change between cohorts (in pp.)", fill = "Occupation") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+
+# Paper version
+list.graph$lfs$change$paper = list.graph$lfs$change$core +
+  scale_fill_grey(start = .6, end = 0)
+  ggsave(file.path(loc_graphic, "lfs-change.png"), width = 7, height = 7/2)
+
+# Color version
+list.graph$lfs$change$color = list.graph$lfs$change$core +
+  scale_fill_manual(values = alpha(rev(brewer.pal(3, "Set1")), .7))
+  ggsave(file.path(loc_graphic, "lfs-change-color.png"), width = 7, height = 7/2)
+```
+
+# Patterns of mobility
+
+## Coefficients
+
+```{r}
+# List of coefficients for occupational logit regressions [FULL]
+list.coef$occ = list(
+  "(Intercept)" = "Intercept",
+  "cohortBCS70" = "BCS cohort",
+  # Sex
+  "sexFemale" = "Female",
+  "cohortBCS70:sexFemale" = "Female $\\times$ BCS",
+  # Parental income
+  "pinc_STD" = "Par. inc.", 
+  "pinc_LOG" = "Par. inc.",
+  "pinc_LOG_STD" = "Par. inc.",
+  # Parental education
+    # Father
+    "educ_left_father_PIR" = "Father's education",
+    "educ_left_father_PIR_STD" = "Father's education",
+    # Mother
+    "educ_left_mother_PIR" = "Mother's education",
+    "educ_left_mother_PIR_STD" = "Mother's education",
+    # Father social class
+    "psc_PIR" = "Father's soc. class",
+    "psc_PIR_STD" = "Father's soc. class",
+    # Number of siblings
+    "SIBsize" = "Number of siblings",
+    "SIBsize_STD" = "Number of siblings",
+    # Eldest child
+    "eldestYes" = "Eldest child",
+  ## BCS interaction
+  # Parental income
+  "cohortBCS70:pinc_STD" = "Par. inc. $\\times$ BCS", 
+  "cohortBCS70:pinc_LOG" = "Par. inc. $\\times$ BCS",
+  "cohortBCS70:pinc_LOG_STD" = "Par. inc. $\\times$ BCS",
+  # Parental education x BCS
+    # Father's education
+    "cohortBCS70:educ_left_father_PIR" = "Father's educ. $\\times$ BCS",
+    "cohortBCS70:educ_left_father_PIR_STD" = "Father's educ. $\\times$ BCS",
+    # Mother's education
+    "cohortBCS70:educ_left_mother_PIR" = "Mother's educ. $\\times$ BCS",
+    "cohortBCS70:educ_left_mother_PIR_STD" = "Mother's educ. $\\times$ BCS",
+    # Father social class
+    "cohortBCS70:psc_PIR" = "Father's soc. class $\\times$ BCS",
+    "cohortBCS70:psc_PIR_STD" = "Father's soc. class $\\times$ BCS",
+    # Number of siblings
+    "cohortBCS70:SIBsize" = "Number of siblings $\\times$ BCS",
+    "cohortBCS70:SIBsize_STD" = "Number of siblings $\\times$ BCS",
+    # Eldest child
+    "cohortBCS70:eldestYes" = "Eldest child $\\times$ BCS",
+  # Parental income2
+  "pinc_STD2" = "Par. inc.$^2$", 
+  "cohortBCS70:pinc_STD2" = "Par. inc.$^2$ $\\times$ BCS", 
+  # Education
+  "educ_PIR_STD" = "Education",
+  "cohortBCS70:educ_PIR_STD" = "Education $\\times$ BCS",
+  # Occupation
+  "occ_group4_p1Out-of-work" = "Out-of-work",
+  "occ_group4_p1Low-paying" = "Low-paying",
+  "occ_group4_p1Middling" = "Middling",
+  "occ_group4_p1High-paying" = "High-paying",
+  "cohortBCS70:occ_group4_p1Out-of-work" = "Out. $\\times$ BCS",
+  "cohortBCS70:occ_group4_p1Low-paying" = "Low. $\\times$ BCS",
+  "cohortBCS70:occ_group4_p1Middling" = "Mid. $\\times$ BCS",
+  "cohortBCS70:occ_group4_p1High-paying" = "High. $\\times$ BCS",
+  # Occupation with robustness (rob23)
+  "occ_group4_age23Out-of-work" = "Out-of-work",
+  "occ_group4_age23Low-paying" = "Low-paying",
+  "occ_group4_age23Middling" = "Middling",
+  "occ_group4_age23High-paying" = "High-paying",
+  "cohortBCS70:occ_group4_age23Out-of-work" = "Out. $\\times$ BCS",
+  "cohortBCS70:occ_group4_age23Low-paying" = "Low. $\\times$ BCS",
+  "cohortBCS70:occ_group4_age23Middling" = "Mid. $\\times$ BCS",
+  "cohortBCS70:occ_group4_age23High-paying" = "High. $\\times$ BCS",
+  # Occupation with robustness (rob26)
+  "occ_group4_age26Out-of-work" = "Out-of-work",
+  "occ_group4_age26Low-paying" = "Low-paying",
+  "occ_group4_age26Middling" = "Middling",
+  "occ_group4_age26High-paying" = "High-paying",
+  "cohortBCS70:occ_group4_age26Out-of-work" = "Out. $\\times$ BCS",
+  "cohortBCS70:occ_group4_age26Low-paying" = "Low. $\\times$ BCS",
+  "cohortBCS70:occ_group4_age26Middling" = "Mid. $\\times$ BCS",
+  "cohortBCS70:occ_group4_age26High-paying" = "High. $\\times$ BCS"
+)
+```
+
+```{r}
+# List of coefficients for occupational logit regressions [SHORT]
+# Without cohort, BCS, Female and Female x BCS
+list.coef$occ.short = list(
+  # Parental income
+  "pinc_STD" = "Par. inc.", 
+  "pinc_LOG" = "Par. inc.",
+  "pinc_LOG_STD" = "Par. inc.",
+  ## BCS interaction
+  # Parental income
+  "cohortBCS70:pinc_STD" = "Par. inc. $\\times$ BCS", 
+  "cohortBCS70:pinc_LOG" = "Par. inc. $\\times$ BCS",
+  "cohortBCS70:pinc_LOG_STD" = "Par. inc. $\\times$ BCS",
+  # Parental income2
+  "pinc_STD2" = "Par. inc.$^2$", 
+  "cohortBCS70:pinc_STD2" = "Par. inc.$^2$ $\\times$ BCS", 
+  # Education
+  # "educ_PIR_STD" = "Education",
+  # "cohortBCS70:educ_PIR_STD" = "Education $\\times$ BCS",
+  # Occupation
+  "occ_group4_p1Out-of-work" = "Out-of-work",
+  "occ_group4_p1Low-paying" = "Low-paying",
+  "occ_group4_p1Middling" = "Middling",
+  "occ_group4_p1High-paying" = "High-paying",
+  "cohortBCS70:occ_group4_p1Out-of-work" = "Out. $\\times$ BCS",
+  "cohortBCS70:occ_group4_p1Low-paying" = "Low. $\\times$ BCS",
+  "cohortBCS70:occ_group4_p1Middling" = "Mid. $\\times$ BCS",
+  "cohortBCS70:occ_group4_p1High-paying" = "High. $\\times$ BCS",
+  # Occupation with robustness (age23)
+  "occ_group4_age23Out-of-work" = "Out-of-work",
+  "occ_group4_age23Low-paying" = "Low-paying",
+  "occ_group4_age23Middling" = "Middling",
+  "occ_group4_age23High-paying" = "High-paying",
+  "cohortBCS70:occ_group4_age23Out-of-work" = "Out. $\\times$ BCS",
+  "cohortBCS70:occ_group4_age23Low-paying" = "Low. $\\times$ BCS",
+  "cohortBCS70:occ_group4_age23Middling" = "Mid. $\\times$ BCS",
+  "cohortBCS70:occ_group4_age23High-paying" = "High. $\\times$ BCS",
+  # Occupation with robustness (age26)
+  "occ_group4_age26Out-of-work" = "Out-of-work",
+  "occ_group4_age26Low-paying" = "Low-paying",
+  "occ_group4_age26Middling" = "Middling",
+  "occ_group4_age26High-paying" = "High-paying",
+  "cohortBCS70:occ_group4_age26Out-of-work" = "Out. $\\times$ BCS",
+  "cohortBCS70:occ_group4_age26Low-paying" = "Low. $\\times$ BCS",
+  "cohortBCS70:occ_group4_age26Middling" = "Mid. $\\times$ BCS",
+  "cohortBCS70:occ_group4_age26High-paying" = "High. $\\times$ BCS"
+)
+```
+
+## Regressions
+
+### Multinomial logit
+
+```{r}
+# Empty list for results
+list.reg$occ = list()
+list.formula$occ$multi = list()
+
+# Formulas
+list.formula$occ$multi = list(
+  occ_group4_p1 ~ cohort*sex + pinc_LOG_STD*cohort, # Multi1
+  occ_group4_p3 ~ cohort*sex + pinc_LOG_STD*cohort, # Multi2
+  occ_group4_p3 ~ cohort*sex + pinc_LOG_STD*cohort + occ_group4_p1*cohort #Multi3
+  )
+
+# Multinomial logistic regression
+list.reg$occ$multi1 = multinom(list.formula$occ$multi[[1]], data = df.wide)
+list.reg$occ$multi2 = multinom(list.formula$occ$multi[[2]], data = df.wide)
+list.reg$occ$multi3 = multinom(list.formula$occ$multi[[3]], data = df.wide)
+```
+
+```{r}
+### First-period occupation
+## Multinomial [FULL VERSION]
+# Write table (LaTeX format)
+list.table$occ$multi1$base = tabular(list.reg$occ$multi1,
+        coef_map = list.coef$occ,
+        model_map = c("Low-paying", "Middling", "High-paying"),
+        reg.type = "Multinomial logit - Dep. var.: First-period occupation", 
+        digits = 2, beside = T, include.groups = F, include.loglik = F)
+# Write
+writeLines(list.table$occ$multi1$base, 
+           con = file.path(loc_tabular, "occ-multi1-base.tex"), sep = "\n")
+## Multinomial [SHORT VERSION]
+# Write table (LaTeX format)
+list.table$occ$multi1$short = tabular(list.reg$occ$multi1,
+        coef_map = list.coef$occ.short,
+        model_map = c("Low-paying", "Middling", "High-paying"),
+        reg.type = "Multinomial logit - Dep. var.: First-period occupation",
+        digits = 2, beside = T, include.groups = F, include.loglik = F)
+# Write
+writeLines(list.table$occ$multi1$short, 
+           con = file.path(loc_tabular, "occ-multi1-short.tex"), sep = "\n")
+```
+
+
+```{r}
+### Second-period occupation
+## Multinomial [FULL VERSION]
+# Write table (LaTeX format)
+list.table$occ$multi23$base = tabular(list(list.reg$occ$multi2, list.reg$occ$multi3),
+        coef_map = list.coef$occ,
+        model_map = rep(c("Low", "Mid", "High"), 2),
+        group.models = list("(1)" = c(1:3), "(2)" = c(4:6)),
+  groups = list("Change with respect to the referent group as first period occupation (Out-of-work)" = 7:9,
+                "Change between cohorts" = 10:12),
+        reg.type = "Multinomial logit - Dep. var.: Second-period occupation", 
+        digits = 2, beside = T, include.groups = F, include.loglik = F)
+# Write
+writeLines(list.table$occ$multi23$base, 
+           con = file.path(loc_tabular, "occ-multi23-base.tex"), sep = "\n")
+## Multinomial [SHORT VERSION]
+# Write table (LaTeX format)
+list.table$occ$multi2$short = tabular(list.reg$occ$multi2,
+        coef_map = list.coef$occ.short,
+        model_map = c("Low-paying", "Middling", "High-paying"),
+        reg.type = "Multinomial logit - Dep. var.: Second-period occupation", 
+        digits = 2, beside = T, include.groups = F, include.loglik = F)
+# Write
+writeLines(list.table$occ$multi2$short, 
+           con = file.path(loc_tabular, "occ-multi2-short.tex"), sep = "\n")
+
+```
+
+OLD
+
+```{r}
+### Second-period occupation
+## Multinomial [FULL VERSION]
+# Write table (LaTeX format)
+list.table$occ$multi23$base = tabular(list(list.reg$occ$multi2, list.reg$occ$multi3),
+        coef_map = list.coef$occ,
+        model_map = rep(c("Low", "Mid", "High"), 2),
+        group.models = list("(1)" = c(1:3), "(2)" = c(4:6)),
+  groups = list("Change with respect to the referent group as first period occupation (Out-of-work)" = 7:9,
+                "Change between cohorts" = 10:12),
+        reg.type = "Multinomial logit - Dep. var.: Second-period occupation", 
+        digits = 2, beside = T, include.groups = F, include.loglik = F)
+# Write
+writeLines(list.table$occ$multi23$base, 
+           con = file.path(loc_tabular, "occ-multi23-base.tex"), sep = "\n")
+## Multinomial [SHORT VERSION]
+# Write table (LaTeX format)
+list.table$occ$multi23$short = tabular(list(list.reg$occ$multi2, list.reg$occ$multi3),
+        coef_map = list.coef$occ.short,
+        model_map = rep(c("Low", "Mid", "High"), 2),
+        group.models = list("(1)" = c(1:3), "(2)" = c(4:6)),
+  groups = list("Change with respect to the referent group as first period occupation (Out-of-work)" = 3:5,
+                "Change between cohorts" = 6:8),
+        reg.type = "Multinomial logit - Dep. var.: Second-period occupation", 
+        digits = 2, beside = T, include.groups = F, include.loglik = F)
+# Write
+writeLines(list.table$occ$multi23$short, con = file.path(loc_tabular, "occ-multi23-short.tex"), sep = "\n")
+
+```
+
+### Binomial logit
+
+```{r}
+# Empty list for results
+list.reg$occ$bi = list()
+list.formula$occ$bi = list()
+
+# Formulas
+list.formula$occ$bi = list(
+  occ_group4_p1 == "Out-of-work" ~ cohort*sex + pinc_LOG_STD*cohort, # Bi1
+  occ_group4_p3 == "Out-of-work" ~ cohort*sex + pinc_LOG_STD*cohort, # Bi2
+  occ_group4_p3 == "Out-of-work" ~ cohort*sex + pinc_LOG_STD*cohort + 
+    occ_group4_p1*cohort #Bi3
+  )
+
+## Binomial logistic regressions
+# Bi1
+list.reg$occ$bi1$out1 = glm(list.formula$occ$bi[[1]], family = "binomial", data = df.wide)
+list.reg$occ$bi1$low1 = update(list.reg$occ$bi1$out, occ_group4_p1 == "Low-paying" ~ .)
+list.reg$occ$bi1$mid1 = update(list.reg$occ$bi1$out, occ_group4_p1 == "Middling" ~ .)
+list.reg$occ$bi1$high1 = update(list.reg$occ$bi1$out, occ_group4_p1 == "High-paying" ~ .)
+# Bi2
+list.reg$occ$bi2$out = glm(list.formula$occ$bi[[2]], family = "binomial", data = df.wide)
+list.reg$occ$bi2$low = update(list.reg$occ$bi2$out, occ_group4_p3 == "Low-paying" ~ .)
+list.reg$occ$bi2$mid = update(list.reg$occ$bi2$out, occ_group4_p3 == "Middling" ~ .)
+list.reg$occ$bi2$high = update(list.reg$occ$bi2$out, occ_group4_p3 == "High-paying" ~ .)
+# Bi2
+list.reg$occ$bi3$out = glm(list.formula$occ$bi[[3]], family = "binomial", data = df.wide)
+list.reg$occ$bi3$low = update(list.reg$occ$bi3$out, occ_group4_p3 == "Low-paying" ~ .)
+list.reg$occ$bi3$mid = update(list.reg$occ$bi3$out, occ_group4_p3 == "Middling" ~ .)
+list.reg$occ$bi3$high = update(list.reg$occ$bi3$out, occ_group4_p3 == "High-paying" ~ .)
+```
+
+```{r}
+## Binomial 1
+# Write table (LaTeX format)
+list.table$occ$bi1$base = tabular(list.reg$occ$bi1,
+        coef_map = list.coef$occ,
+        model_map = c("Out-of-work", "Low-paying", "Middling", "High-paying"),
+        reg.type = "Binomial logit - Dep. var.: First-period occupation", digits = 2)
+# Write
+writeLines(list.table$occ$bi1$base, con = file.path(loc_tabular, "occ-bi1-base.tex"), sep = "\n")
+## Binomial 2 ALL
+# Write table (LaTeX format)
+list.table$occ$bi23$base = tabular(append(list.reg$occ$bi2, list.reg$occ$bi3)[c(1,5,2,6,3,7,4,8)],
+  coef_map = list.coef$occ,
+  model_map = rep(c("(1)", "(2)"), 4),
+  group.models = list("Out-of-work" = 1:2, "Low-paying" = 3:4, "Middling" = 5:6, "High-paying" = 7:8),
+  groups = list("Change with respect to the referent group as first period occupation (Out-of-work)" = 7:9,
+                "Change between cohorts" = 10:12),
+  reg.type = "Binomial logit - Dep. var.: Second-period occupation", digits = 2)
+# Write
+writeLines(list.table$occ$bi23$base, 
+           con = file.path(loc_tabular, "occ-bi23-base.tex"), sep = "\n")
+```
+
+## Predictions
+
+```{r}
+# Deciles in both cohorts
+deciles = list("NCDS58" = quantile(df.wide$pinc_LOG_STD[df.wide$cohort == "NCDS58"], 
+                                   probs = seq(0.05, 0.95, .1)),
+               "BCS70" = quantile(df.wide$pinc_LOG_STD[df.wide$cohort == "BCS70"], 
+                                  probs = seq(0.05, 0.95, .1)))
+# Decile dataframe
+df.decile = data.frame(
+  cohort = factor(rep(c("NCDS58", "BCS70"), each = 10)),
+  quant = factor(rep(c(1:10), 2), levels = c(1:10)), 
+  pinc_LOG_STD = c(deciles$NCDS58, deciles$BCS70))
+```
+
+### First-period occ.
+
+```{r}
+# Prepare names
+pred.df.names = c("cohort", "sex", "prob.Out.of.work", "prob.Low.paying", "prob.Middling",
+            "prob.High.paying", "L.prob.Out.of.work", "L.prob.Low.paying", "L.prob.Middling",
+            "L.prob.High.paying", "U.prob.Out.of.work", "U.prob.Low.paying", "U.prob.Middling",
+            "U.prob.High.paying")
+# Set empty dataset
+pred.df = data.frame(matrix(nrow = 0, ncol = length(pred.df.names))) %>% 
+  setNames(pred.df.names)
+
+# Loop to generate data
+for(cohort_j in c(0:{length(levels(df.wide$cohort))-1})){
+  for(sex_i in c(0:{length(levels(df.wide$sex))-1})){
+
+  pred.effect = effect("pinc_LOG_STD", list.reg$occ$multi1, 
+    xlevels = list("pinc_LOG_STD" = seq(-2, 2, by = .01)),
+    given.values = c("cohortBCS70" = cohort_j, "sexFemale" = sex_i))
+  
+  pred.df.add = data.frame(cohort = cohort_j, sex = sex_i, 
+    pinc_LOG_STD = seq(-2, 2, by = .01),
+    pred.effect$prob, pred.effect$lower.prob, pred.effect$upper.prob)
+  
+  pred.df = rbind(pred.df, pred.df.add)
+    
+  }
+}
+
+list.pred$occ$multi1$pinc = pred.df %>% 
+  setDT %>% melt(id.vars = c("cohort", "sex", "pinc_LOG_STD")) %>% 
+  separate(variable, into = c("type", "occ"), sep = "prob.") %>% 
+  mutate(
+    type = factor(type, levels = c("", "L.", "U."), labels = c("prob", "lower", "upper")),
+    occ = factor(occ, levels = c("Out.of.work", "Low.paying", "Middling", "High.paying"),
+                 labels = c("Out-of-work",  "Low-paying", "Middling", "High-paying")),
+    cohort = factor(cohort, levels = c(0, 1), labels = c("NCDS58", "BCS70")),
+    sex = factor(sex, levels = c(0, 1), labels = c("Male", "Female")),
+  ) %>% 
+  setDT %>% dcast(cohort + sex + pinc_LOG_STD + occ ~ type, value.var = "value")
+```
+
+```{r occ-multi1-pinc, fig.cap='Probability to be in each occupation at first period according to parental income', out.width='100%', fig.width = 7, fig.asp = .5, fig.align='center', dpi = 200}
+## Core
+list.graph$occ$multi1$pinc$core = list.pred$occ$multi1$pinc %>%
+  mutate_at(vars(prob, lower, upper),  function(x){x*100}) %>% 
+  filter(complete.cases(.))
+
+# Paper version
+list.graph$occ$multi1$pinc$paper = list.graph$occ$multi1$pinc$core %>%
+  
+  ggplot(aes(x = pinc_LOG_STD, linetype = cohort)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), fill = "grey70", alpha = .5, show.legend = F) +
+  geom_line(aes(y = prob)) +
+  facet_grid(sex ~ occ) +
+  labs(x = "Parental income (log-standardised)", y = "Probability (in percent)", 
+       title = "First-period occupation", linetype = "Cohort") +
+  theme_bw() +
+  theme(legend.position = "right")
+  ggsave(file.path(loc_graphic, "occ-multi1-pinc.png"), width = 7, height = 7/2)
+
+# Color version
+list.graph$occ$multi1$pinc$color = list.graph$occ$multi1$pinc$core %>% 
+  
+  ggplot(aes(x = pinc_LOG_STD, linetype = cohort)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = occ), alpha = .2, show.legend = F) +
+  geom_line(aes(y = prob, color = occ)) +
+  facet_grid(sex ~ occ) +
+  scale_color_manual(values = rev(brewer.pal(4, "Set1")), guide = "none") +
+  scale_fill_manual(values = rev(brewer.pal(4, "Set1")), guide = "none") +
+  labs(x = "Parental income (log-standardised)", y = "Probability (in percent)", 
+       title = "First-period occupation", linetype = "Cohort") +
+  theme_bw() +
+  theme(legend.position = "right")
+  ggsave(file.path(loc_graphic, "occ-multi1-pinc-color.png"), width = 7, height = 7/2)
+```
+
+### Second-period occ.
+
+```{r}
+# Prepare names
+pred.df.names = c("cohort", "sex", "prob.Out.of.work", "prob.Low.paying", "prob.Middling",
+            "prob.High.paying", "L.prob.Out.of.work", "L.prob.Low.paying", "L.prob.Middling",
+            "L.prob.High.paying", "U.prob.Out.of.work", "U.prob.Low.paying", "U.prob.Middling",
+            "U.prob.High.paying")
+# Set empty dataset
+pred.df = data.frame(matrix(nrow = 0, ncol = length(pred.df.names))) %>% 
+  setNames(pred.df.names)
+
+# Loop to generate data
+for(cohort_j in c(0:{length(levels(df.wide$cohort))-1})){
+  for(sex_i in c(0:{length(levels(df.wide$sex))-1})){
+
+  pred.effect = effect("pinc_LOG_STD", list.reg$occ$multi2, 
+    xlevels = list("pinc_LOG_STD" = seq(-2, 2, by = .01)),
+    given.values = c("cohortBCS70" = cohort_j, "sexFemale" = sex_i))
+  
+  pred.df.add = data.frame(cohort = cohort_j, sex = sex_i, 
+    pinc_LOG_STD = seq(-2, 2, by = .01),
+    pred.effect$prob, pred.effect$lower.prob, pred.effect$upper.prob)
+  
+  pred.df = rbind(pred.df, pred.df.add)
+    
+  }
+}
+
+list.pred$occ$multi2$pinc = pred.df %>% 
+  setDT %>% melt(id.vars = c("cohort", "sex", "pinc_LOG_STD")) %>% 
+  separate(variable, into = c("type", "occ"), sep = "prob.") %>% 
+  mutate(
+    type = factor(type, levels = c("", "L.", "U."), labels = c("prob", "lower", "upper")),
+    occ = factor(occ, levels = c("Out.of.work", "Low.paying", "Middling", "High.paying"),
+                 labels = c("Out-of-work",  "Low-paying", "Middling", "High-paying")),
+    cohort = factor(cohort, levels = c(0, 1), labels = c("NCDS58", "BCS70")),
+    sex = factor(sex, levels = c(0, 1), labels = c("Male", "Female")),
+  ) %>% 
+  setDT %>% dcast(cohort + sex + pinc_LOG_STD + occ ~ type, value.var = "value")
+```
+
+```{r occ-multi2-pinc, fig.cap='Probability to be in each occupation at second period according to parental income', out.width='100%', fig.width = 7, fig.asp = .5, fig.align='center', dpi = 200}
+## Core
+list.graph$occ$multi2$pinc$core = list.pred$occ$multi2$pinc %>%
+  mutate_at(vars(prob, lower, upper),  function(x){x*100}) %>% 
+  filter(complete.cases(.))
+
+# Paper version
+list.graph$occ$multi2$pinc$paper = list.graph$occ$multi2$pinc$core %>%
+  
+  ggplot(aes(x = pinc_LOG_STD, linetype = cohort)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), fill = "grey70", alpha = .5, show.legend = F) +
+  geom_line(aes(y = prob)) +
+  facet_grid(sex ~ occ) +
+  labs(x = "Parental income (log-standardised)", y = "Probability (in percent)", 
+       title = "Second-period occupation", linetype = "Cohort") +
+  theme_bw() +
+  theme(legend.position = "right")
+  ggsave(file.path(loc_graphic, "occ-multi2-pinc.png"), width = 7, height = 7/2)
+
+# Color version
+list.graph$occ$multi2$pinc$color = list.graph$occ$multi2$pinc$core %>% 
+  
+  ggplot(aes(x = pinc_LOG_STD, linetype = cohort)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = occ), alpha = .2, show.legend = F) +
+  geom_line(aes(y = prob, color = occ)) +
+  facet_grid(sex ~ occ) +
+  scale_color_manual(values = rev(brewer.pal(4, "Set1")), guide = "none") +
+  scale_fill_manual(values = rev(brewer.pal(4, "Set1")), guide = "none") +
+  labs(x = "Parental income (log-standardised)", y = "Probability (in percent)", 
+       title = "Second-period occupation", linetype = "Cohort") +
+  theme_bw() +
+  theme(legend.position = "right")
+  ggsave(file.path(loc_graphic, "occ-multi2-pinc-color.png"), width = 7, height = 7/2)
+```
+
+```{r}
+# Prepare names
+pred.df.names = c("cohort", "sex", "occ_group4_p1Out-of-work",
+                  "occ_group4_p1Low-paying", "occ_group4_p1Middling", "occ_group4_p1High-paying",
+                  "prob.Out.of.work", "prob.Low.paying", "prob.Middling",
+            "prob.High.paying", "L.prob.Out.of.work", "L.prob.Low.paying", "L.prob.Middling",
+            "L.prob.High.paying", "U.prob.Out.of.work", "U.prob.Low.paying", "U.prob.Middling",
+            "U.prob.High.paying")
+# Set empty dataset
+pred.df = data.frame(matrix(nrow = 0, ncol = length(pred.df.names))) %>% 
+  setNames(pred.df.names)
+
+# Loop to generate data
+for(cohort_j in c(0:{length(levels(df.wide$cohort))-1})){
+  for(sex_i in c(0:{length(levels(df.wide$sex))-1})){
+    
+  # Out
+  pred.effect.out = effect("pinc_LOG_STD", list.reg$occ$multi3, 
+    xlevels = list("pinc_LOG_STD" = seq(-2, 2, by = .01)),
+    given.values = c("cohortBCS70" = cohort_j, "sexFemale" = sex_i,
+                     "occ_group4_p1Out-of-work" = 1, 
+                     "occ_group4_p1Low-paying" = 0, 
+                     "occ_group4_p1Middling" = 0, 
+                     "occ_group4_p1High-paying" = 0))
+
+  # Low
+  pred.effect.low = effect("pinc_LOG_STD", list.reg$occ$multi3, 
+    xlevels = list("pinc_LOG_STD" = seq(-2, 2, by = .01)),
+    given.values = c("cohortBCS70" = cohort_j, "sexFemale" = sex_i,
+                     "occ_group4_p1Out-of-work" = 0, 
+                     "occ_group4_p1Low-paying" = 1, 
+                     "occ_group4_p1Middling" = 0, 
+                     "occ_group4_p1High-paying" = 0))
+  # Mid
+  pred.effect.mid = effect("pinc_LOG_STD", list.reg$occ$multi3, 
+    xlevels = list("pinc_LOG_STD" = seq(-2, 2, by = .01)),
+    given.values = c("cohortBCS70" = cohort_j, "sexFemale" = sex_i,
+                     "occ_group4_p1Out-of-work" = 0, 
+                     "occ_group4_p1Low-paying" = 0, 
+                     "occ_group4_p1Middling" = 1, 
+                     "occ_group4_p1High-paying" = 0))
+  # High
+  pred.effect.high = effect("pinc_LOG_STD", list.reg$occ$multi3, 
+    xlevels = list("pinc_LOG_STD" = seq(-2, 2, by = .01)),
+    given.values = c("cohortBCS70" = cohort_j, "sexFemale" = sex_i,
+                     "occ_group4_p1Out-of-work" = 0, 
+                     "occ_group4_p1Low-paying" = 0, 
+                     "occ_group4_p1Middling" = 0, 
+                     "occ_group4_p1High-paying" = 1))
+  
+  # Add data
+  pred.df.add.out = data.frame(cohort = cohort_j, sex = sex_i, 
+    `occ_group4_p1Out-of-work` = 1, `occ_group4_p1Low-paying` = 0, 
+    `occ_group4_p1Middling` = 0, `occ_group4_p1High-paying` = 0,
+    pinc_LOG_STD = seq(-2, 2, by = .01),
+    pred.effect.out$prob, pred.effect.out$lower.prob, pred.effect.out$upper.prob)
+  pred.df.add.low = data.frame(cohort = cohort_j, sex = sex_i, 
+    `occ_group4_p1Out-of-work` = 0, `occ_group4_p1Low-paying` = 1, 
+    `occ_group4_p1Middling` = 0, `occ_group4_p1High-paying` = 0,
+    pinc_LOG_STD = seq(-2, 2, by = .01),
+    pred.effect.low$prob, pred.effect.low$lower.prob, pred.effect.low$upper.prob)
+  pred.df.add.mid = data.frame(cohort = cohort_j, sex = sex_i, 
+    `occ_group4_p1Out-of-work` = 0, `occ_group4_p1Low-paying` = 0, 
+    `occ_group4_p1Middling` = 1, `occ_group4_p1High-paying` = 0,
+    pinc_LOG_STD = seq(-2, 2, by = .01),
+    pred.effect.mid$prob, pred.effect.mid$lower.prob, pred.effect.mid$upper.prob)
+  pred.df.add.high = data.frame(cohort = cohort_j, sex = sex_i, 
+    `occ_group4_p1Out-of-work` = 0, `occ_group4_p1Low-paying` = 0, 
+    `occ_group4_p1Middling` = 0, `occ_group4_p1High-paying` = 1,
+    pinc_LOG_STD = seq(-2, 2, by = .01),
+    pred.effect.high$prob, pred.effect.high$lower.prob, pred.effect.high$upper.prob)
+  
+  pred.df = rbind(pred.df, pred.df.add.out) %>% 
+    rbind(pred.df.add.low) %>% 
+    rbind(pred.df.add.mid) %>% 
+    rbind(pred.df.add.high)
+    
+  }
+}
+
+list.pred$occ$multi3$pinc = pred.df %>%
+  as.data.table %>% 
+  melt(id.vars = c("cohort", "sex", "pinc_LOG_STD", names(.)[8:ncol(.)]),
+       variable.name = "occ_group4_p1") %>% 
+  subset(value != 0) %>% select(-value) %>% 
+  mutate(occ_group4_p1 = factor(occ_group4_p1, 
+    levels = c("occ_group4_p1Out.of.work", "occ_group4_p1Low.paying", 
+               "occ_group4_p1Middling", "occ_group4_p1High.paying"),
+    labels = c("Out-of-work", "Low-paying", "Middling", "High-paying"))) %>% 
+  as.data.table %>% 
+  melt(id.vars = c("cohort", "sex", "pinc_LOG_STD", "occ_group4_p1")) %>%
+  separate(variable, into = c("type", "occ"), sep = "prob.") %>% 
+  mutate(
+    type = factor(type, levels = c("", "L.", "U."), labels = c("prob", "lower", "upper")),
+    occ = factor(occ, levels = c("Out.of.work", "Low.paying", "Middling", "High.paying"),
+                 labels = c("Out-of-work",  "Low-paying", "Middling", "High-paying")),
+    cohort = factor(cohort, levels = c(0, 1), labels = c("NCDS58", "BCS70")),
+    sex = factor(sex, levels = c(0, 1), labels = c("Male", "Female")),
+  ) %>% 
+  setDT %>% dcast(cohort + sex + pinc_LOG_STD + occ_group4_p1 + occ ~ type, value.var = "value")
+```
+
+```{r}
+# Add confidence intervals
+list.graph$occ$multi3$pinc$core  <- list.pred$occ$multi3$pinc %>% 
+  arrange(cohort) %>% 
+  group_by(sex, pinc_LOG_STD, occ_group4_p1, occ) %>% 
+  mutate(se = (prob - lower)/1.96) %>% 
+  summarize(prob = last(prob) - first(prob),
+            se = sqrt(last(se)^2 + first(se)^2), .groups = "keep") %>% 
+  mutate(lower = prob - 1.96*se, upper = prob + 1.96*se) %>% 
+  mutate(occ_group4_p1 = factor(occ_group4_p1, 
+    levels = c( "High-paying", "Middling", "Low-paying", "Out-of-work"), 
+    labels = c("High", "Mid", "Low", "Out"))) %>% 
+  mutate_at(vars(prob, lower, upper), ~ .*100)
+```
+
+```{r}
+for(sex_i in levels(list.pred$occ$multi3$pinc$sex)){
+## BASE VERSION
+# Paper version
+list.graph$occ$multi3$pinc$paper = list.graph$occ$multi3$pinc$core %>%
+  subset(sex == sex_i) %>% 
+  
+  ggplot(aes(x = pinc_LOG_STD, y = prob)) +
+  geom_hline(yintercept = 0, linetype = "dotted") +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2) +
+  geom_line() +
+  facet_grid(occ_group4_p1 ~ occ) +
+  labs(x = "Parental income (log-standardised)", y = "Change in probability (in pp.)",
+       title = "Second-period occupation") +
+  theme_bw() +
+  theme(legend.position = "none")
+  ggsave(file.path(loc_graphic, paste0("occ-multi3-pinc-", tolower(sex_i), ".png")),
+         width = 7, height = 7/1.5)
+# Color version
+list.graph$occ$multi3$pinc$color = list.graph$occ$multi3$pinc$core %>%
+  subset(sex == sex_i) %>% 
+
+  ggplot(aes(x = pinc_LOG_STD, y = prob, color = occ, fill = occ)) +
+  geom_hline(yintercept = 0, linetype = "dotted") +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2, color = NA) +
+  geom_line() +
+  facet_grid(occ_group4_p1 ~ occ) +
+  scale_color_manual(values = alpha(rev(brewer.pal(4, "Set1")), alpha = .7)) +
+  scale_fill_manual(values = rev(brewer.pal(4, "Set1"))) +
+  labs(x = "Parental income (log-standardised)", y = "Change in probability (in pp.)",
+       title = "Second-period occupation") +
+  theme_bw() +
+  theme(legend.position = "none",)
+  ggsave(file.path(loc_graphic, paste0("occ-multi3-pinc-", tolower(sex_i), "-color.png")),
+         width = 7, height = 7/1.5)
+}
+```
+
+
+## Intra-generational mobility
+
+```{r}
+## Core PINC
+list.table$mobility$pinc = list.graph$occ$multi3$pinc$core %>% 
+  select(sex, pinc_LOG_STD, occ_group4_p1, occ, prob) %>% 
+  mutate(occ_group4_p1 = factor(occ_group4_p1, levels = c("Out", "Low", "Mid", "High"))) %>% 
+  mutate(mobility = case_when(
+    as.numeric(occ_group4_p1) < as.numeric(occ) ~ "Up",
+    as.numeric(occ_group4_p1) == as.numeric(occ) ~ "Persist",
+    as.numeric(occ_group4_p1) > as.numeric(occ) ~ "Down")) %>% 
+  group_by(sex, pinc_LOG_STD, occ_group4_p1, mobility) %>% 
+  summarize(delta = sum(prob), .groups = "keep") %>% 
+  ungroup
+```
+
+
+```{r}
+list.table$mobility$pinc %>% 
+  select(sex, pinc_LOG_STD, occ_group4_p1, mobility, delta) %>% unique %>%
+  mutate(delta = sprintf("%.2f", delta)) %>% 
+  setDT %>% dcast(sex + pinc_LOG_STD + occ_group4_p1 ~ mobility, value.var = "delta") %>% 
+  dcast(pinc_LOG_STD + occ_group4_p1 ~ sex, value.var = c("Down", "Persist", "Up")) %>% 
+    select(pinc_LOG_STD, occ_group4_p1, Down_Male, Persist_Male, Up_Male, 
+           Down_Female, Persist_Female, Up_Female) %>% 
+    select(pinc_LOG_STD, occ_group4_p1, Down_Male, Persist_Male, Up_Male, Down_Female, Persist_Female, Up_Female) %>% 
+    select(-pinc_LOG_STD) %>% 
+  mutate(occ_group4_p1 = factor(occ_group4_p1, levels = c("Out", "Low", "Mid", "High"),
+    labels = c("Out-of-work", "Low-paying", "Middling", "High-paying"))) %>% 
+
+    kable(format = "latex", booktabs = TRUE, linesep = "", escape = FALSE, align = "lrrrrrr",
+          col.names = c("First-period occupation", rep(c("Down", "Persist", "Up"), 2))) %>%
+    add_header_above(c("", "Male" = 3, "Female" = 3)) %>%
+    strsplit("\n") %>% unlist %>%
+    {c(.[c(1:7)],
+      "& \\multicolumn{3}{c}{\\textit{at +2 STD}} & \\multicolumn{3}{c}{\\textit{at +2 STD}}\\\\ \n\\midrule",
+      .[c(8:11)],
+      "\\midrule \n & \\multicolumn{3}{c}{\\textit{at the Mean}} & \\multicolumn{3}{c}{\\textit{at the Mean}}\\\\ \n\\midrule",
+      .[c(12:15)],
+      "\\midrule \n & \\multicolumn{3}{c}{\\textit{at -2 STD}} & \\multicolumn{3}{c}{\\textit{at -2 STD}}\\\\ \n\\midrule",
+      .[c(16:21)])} %>%
+    writeLines(.,
+      con = file.path(loc_tabular, paste0("mob-pinc-both.tex")), sep = "\n")
+```
+
+```{r persist}
+## Core
+list.graph$persist$pinc$both$core = list.table$mobility$pinc %>%
+  select(sex, pinc_LOG_STD, occ_group4_p1, mobility, delta) %>% unique %>% 
+  add_count(sex, pinc_LOG_STD, occ_group4_p1, mobility, wt = delta, name = "delta") %>% 
+  mutate(occ_group4_p1 = factor(occ_group4_p1, 
+    labels = c("Out-of-work", "Low-paying", "Middling", "High-paying")),
+    mobility = factor(mobility, levels = c("Up", "Persist", "Down")),
+    sex = factor(sex, levels = c("Male", "Female")))
+  
+## Paper version
+list.graph$persist$pinc$both$paper = list.graph$persist$pinc$both$core %>% 
+  ggplot(aes(x = pinc_LOG_STD, y = delta, linetype = mobility)) +
+  geom_line() +
+  facet_grid(sex ~ occ_group4_p1, scales = "free_y") +
+  theme_bw() +
+  labs(x = "Parental income decile", y = "Change in the probability (in pp.)", 
+       linetype = "Type of mobility", title = "First-period occupation") +
+  theme(legend.position = "bottom")
+  ggsave(file.path(loc_graphic, paste0("persist-pinc-both.png")), width = 7, height = 7/1.5)
+
+## Color version
+list.graph$persist$pinc$both$color = list.graph$persist$pinc$both$core %>% 
+  ggplot(aes(x = pinc_LOG_STD, y = delta, color = mobility)) +
+  geom_line() +
+  facet_grid(sex ~ occ_group4_p1, scales = "free_y") +
+  theme_bw() +
+  labs(x = "Parental income decile", y = "Change in the probability (in pp.)", 
+       color = "Type of mobility", title = "First-period occupation") +
+  theme(legend.position = "bottom") +
+  scale_color_manual(values = brewer.pal(8, "Set2")[c(2,3,1)])
+  ggsave(file.path(loc_graphic, paste0("persist-pinc-both-color.png")), width = 7, height = 7/1.5)
+```
+
+```{r}
+list.pred$occ$multi3$quant = expand.grid(
+  cohort = c("NCDS58", "BCS70"),
+  sex = c("Male", "Female"),
+  quant = factor(c(1:10), levels = c(1:10)),
+  occ_group4_p1 = factor(c("Out-of-work", "Low-paying", "Middling", "High-paying"),
+    levels = c("Out-of-work", "Low-paying", "Middling", "High-paying"))
+  ) %>% 
+  merge(df.decile, by = c("cohort", "quant")) %>% 
+  cbind(., pred = predict(list.reg$occ$multi3, newdata = ., type = "probs")) %>% 
+  setDT %>% 
+  melt(id.vars = c("cohort", "quant", "sex", "pinc_LOG_STD", "occ_group4_p1"), 
+       variable.name = "occ") %>% 
+  mutate(occ = factor(str_remove(occ, "pred."), 
+    levels = c("Out-of-work", "Low-paying", "Middling", "High-paying"))) %>% 
+  setDT %>% dcast.data.table(sex + quant + occ + occ_group4_p1 ~ cohort, 
+                             value.var = "value") %>% 
+  mutate_at(vars(NCDS58, BCS70), function(x){x*100}) %>% 
+  mutate(delta = BCS70-NCDS58)
+
+list.table$mobility$quant = list.pred$occ$multi3$quant %>% 
+  select(sex, quant, occ_group4_p1, occ, delta) %>% 
+  mutate(occ_group4_p1 = factor(occ_group4_p1, 
+                                levels = c("Out-of-work", "Low-paying", "Middling", "High-paying"))) %>% 
+  mutate(mobility = case_when(
+    as.numeric(occ_group4_p1) < as.numeric(occ) ~ "Up",
+    as.numeric(occ_group4_p1) == as.numeric(occ) ~ "Persist",
+    as.numeric(occ_group4_p1) > as.numeric(occ) ~ "Down")) %>% 
+  select(sex, quant, occ_group4_p1, mobility, delta) %>% unique %>% 
+  add_count(sex, quant, occ_group4_p1, mobility, wt = delta, name = "delta")
+```
+
+```{r persist}
+## Core
+list.graph$persist$quant$data = list.table$mobility$quant %>%
+  select(sex, quant, occ_group4_p1, mobility, delta) %>% unique %>% 
+  add_count(sex, quant, occ_group4_p1, mobility, wt = delta, name = "delta") %>% 
+  mutate(occ_group4_p1 = factor(occ_group4_p1, 
+    labels = c("Out-of-work", "Low-paying", "Middling", "High-paying")),
+    mobility = factor(mobility, levels = c("Down", "Persist", "Up")),
+    sex = factor(sex, levels = c("Male", "Female")))
+
+for(sex_i in levels(df.wide$sex)){
+  
+  ## Core version
+  list.graph$persist$quant[[sex_i]][["core"]] = list.graph$persist$quant$data %>% 
+    mutate(quant = factor(quant)) %>% 
+    subset(sex == sex_i) %>% 
+    
+    ggplot(aes(x = quant, y = delta, fill = mobility)) +
+    geom_bar(stat = "identity") +
+    facet_wrap(occ_group4_p1 ~ ., nrow = 2) +
+    theme_bw() +
+    labs(x = "Parental income decile", y = "Change in the probability (in pp.)", 
+         fill = "Type of mobility", title = "First-period occupation") +
+    theme(legend.position = "bottom")
+    
+  ## Paper version
+  list.graph$persist$quant[[sex_i]][["paper"]] = list.graph$persist$quant[[sex_i]][["core"]] +
+    scale_fill_grey(start = .8, end = 0)
+    ggsave(file.path(loc_graphic, paste0("persist-", tolower(sex_i), ".png")), width = 7, height = 7/1.5)
+  ## Color version
+  list.graph$persist$quant[[sex_i]][["color"]] = list.graph$persist$quant[[sex_i]][["core"]] +
+    scale_fill_manual(values = alpha(brewer.pal(8, "Set2")[c(1,3,2)], alpha = .8))
+    ggsave(file.path(loc_graphic, paste0("persist-", tolower(sex_i), "-color.png")), width = 7, height = 7/1.5)
+}
+```
+
+```{r}
+  ## Core version
+  list.graph$persist$quant$both$core = list.graph$persist$quant$data %>% 
+    mutate(quant = factor(quant)) %>% 
+    
+    ggplot(aes(x = quant, y = delta, fill = mobility)) +
+    geom_bar(stat = "identity") +
+    facet_grid(sex ~ occ_group4_p1) +
+    theme_bw() +
+    labs(x = "Parental income decile", y = "Change in the probability (in pp.)", 
+         fill = "Type of mobility", title = "First-period occupation") +
+    theme(legend.position = "bottom")
+    
+  ## Paper version
+  list.graph$persist$quant$both$paper = list.graph$persist$quant$both$core +
+    scale_fill_grey(start = .8, end = 0)
+    ggsave(file.path(loc_graphic, paste0("persist-both.png")), width = 7, height = 7/1.5)
+  ## Color version
+  list.graph$persist$quant$both$color = list.graph$persist$quant$both$core +
+    scale_fill_manual(values = alpha(brewer.pal(8, "Set2")[c(1,3,2)], alpha = .8))
+    ggsave(file.path(loc_graphic, paste0("persist-both-color.png")), width = 7, height = 7/1.5)
+```
+
+# Regional mobility
+
+## Mobility at the regional level
+
+### Regressions
+
+```{r, message=F}
+# Empty dataframe for coefficients
+df.coef.multi = data.frame(matrix(ncol = 8, nrow = 0)) %>% 
+  setNames(c("outcome", "location", "(Intercept)", "cohortBCS70", "sexFemale", 
+  "pinc_LOG_STD", "cohortBCS70:sexFemale", "cohortBCS70:pinc_LOG_STD"))
+
+list.reg$region$short = NULL
+
+# Loop over each region
+for(region_i in location_names){
+  
+  # Abbreviation of the region
+  reg_i = names(location_names[which(location_names == region_i)])
+  # Dataframe for that region
+  df.loop = subset(df.wide, region_16yo == region_i)
+  # Multinomial regression for that region
+  loopreg.multi = multinom(occ_group4_p3 ~ cohort*sex + pinc_LOG_STD*cohort, data = df.loop)
+  # Report results
+  list.reg$region[[reg_i]] = loopreg.multi
+  
+  # Report coefficients
+  # Multi
+  df.coef.multi = coef(loopreg.multi) %>% 
+    data.frame(row.names = NULL) %>% 
+    cbind(data.frame(outcome = c("Low", "Mid", "High"), location = region_i), .) %>%
+    rbind(df.coef.multi, .)
+  
+  # Write table (LaTeX format)
+  list.table$region[[reg_i]] = tabular(loopreg.multi,
+    coef_map = list.coef$occ,
+    reg.type = "Multi. logit - Dep. var.: Second-period occupation", 
+    digits = 2, beside = T, include.groups = F, include.loglik = F)
+  # Write
+  writeLines(list.table$region[[reg_i]], con = file.path(loc_tabular, paste0("reg-multi2-", reg_i, ".tex")), sep = "\n")
+  
+  list.table$region$short = c(list.table$region$short,
+                            c(paste0("\\midrule\n ", region_i, " (N = ",
+                                     nrow(loopreg.multi$fitted.values),
+                                     ") & & & \\\\\n\\midrule"),
+                              list.table$region[[reg_i]][c(15:18)]))
+
+}
+
+# Dataframe with Par. inc. coefficients
+df.coef.multi1 = df.coef.multi %>% 
+  setNames(c("outcome", "location", "Intercept", "coef_Sex", 
+             "coef_BCS70", "coef_Pinc", "coef_BCS70xSex", "coef_BCS70xPinc")) %>% 
+  mutate(pincNCDS = coef_Pinc, pincBCS = coef_Pinc + coef_BCS70xPinc)
+
+# Write table (LaTeX format) with all Pinc coefficients
+list.table$region$short %>% 
+  c(list.table$region$EA[c(1:6)], ., list.table$region$EA[c(21:22)]) %>% 
+  writeLines(., con = file.path(loc_tabular, paste0("reg-multi2-short.tex")), sep = "\n")
+  
+```
+
+### Predictions
+
+```{r}
+# Generate continuous data
+list.pred$reg$multi2$pinc = expand.grid(
+  cohort = levels(df.wide$cohort), # Cohort
+  sex = levels(df.wide$sex), # Sex at birth
+  pinc_LOG_STD = seq(-2, 2, by = .01) # Standardized parental income
+)
+
+# Generate data with decile
+list.pred$reg$multi2$quant = expand.grid(
+  cohort = levels(df.wide$cohort),
+  sex = levels(df.wide$sex),
+  quant = factor(c(1:10), levels = c(1:10))) %>% 
+  merge(df.decile, by = c("cohort", "quant"))
+
+# Empty for loop
+list.pred$reg$multi2$pinc1 = data.frame(matrix(ncol = 6, nrow = 0)) %>% 
+  setNames(c(names(list.pred$reg$p3$multi), "region", "outcome", "value"))
+list.pred$reg$multi2$quant1 = data.frame(matrix(ncol = 7, nrow = 0)) %>% 
+  setNames(c(names(list.pred$reg$p3$quant), "region", "outcome", "value"))
+
+for(i in names(location_names)){
+
+list.pred$reg$multi2$pinc1 = list.pred$reg$multi2$pinc %>% 
+  cbind(., pred = predict(list.reg$region[[i]], newdata = ., type = "probs")) %>% 
+  setNames(c(names(.)[c(1:{ncol(.)-4})], paste0(i, "_", c("Out", "Low", "Mid", "High")))) %>% 
+  setDT %>% melt(id.vars = c("cohort", "sex", "pinc_LOG_STD")) %>% 
+  tidyr::separate(variable, into = c("region", "outcome")) %>% 
+  rbind(list.pred$reg$multi2$pinc1, .)
+
+list.pred$reg$multi2$quant1 = list.pred$reg$multi2$quant %>% 
+  cbind(., pred = predict(list.reg$region[[i]], newdata = ., type = "probs")) %>% 
+  setNames(c(names(.)[c(1:{ncol(.)-4})], paste0(i, "_", c("Out", "Low", "Mid", "High")))) %>%
+  setDT %>% melt(id.vars = c("cohort", "sex", "quant", "pinc_LOG_STD")) %>% 
+  tidyr::separate(variable, into = c("region", "outcome")) %>% 
+  rbind(list.pred$reg$multi2$quant1, .)
+
+}
+```
+
+```{r}
+## Multinomial STD Parental income
+for(sex_i in levels(list.pred$reg$multi2$pinc1$sex)){
+# Core version
+list.graph$reg$multi2$pinc1[[tolower(sex_i)]][["core"]] = list.pred$reg$multi2$pinc1 %>% 
+  mutate(outcome = factor(outcome, levels = c("Out", "Low", "Mid", "High"),
+    labels = c("Out-of-work", "Low-paying","Middling", "High-paying")),
+    value = value*100) %>% # in percent
+  subset(sex == sex_i) %>% filter(complete.cases(.)) %>% 
+  
+  ggplot(aes(x = pinc_LOG_STD, y = value, linetype = cohort, color = outcome)) +
+  geom_line() +
+  facet_grid(region ~ outcome) +
+  scale_linetype_manual(values = c("solid", "dashed")) +
+  labs(x = "Parental income (log-standardised)", y = "Probability (in percent)", 
+       title = "Second-period occupation", linetype = "Cohort") +
+  theme_bw() +
+  theme(legend.position = "bottom") +
+  guides(color = "none")
+
+# Paper version
+list.graph$reg$multi2$pinc1[[tolower(sex_i)]][["paper"]] = list.graph$reg$multi2$pinc1[[tolower(sex_i)]][["core"]] +
+  scale_color_manual(values = rep("black", 4))
+    ggsave(file.path(loc_graphic, paste0("reg-multi2-pinc-", tolower(sex_i), ".png")), 
+           width = 7, height = 7*1.7)
+  
+# Color version
+list.graph$reg$multi2$pinc1[[tolower(sex_i)]][["color"]] = list.graph$reg$multi2$pinc1[[tolower(sex_i)]][["core"]] +
+  scale_color_manual(values = rev(brewer.pal(4, "Set1")))
+    ggsave(file.path(loc_graphic, paste0("reg-multi2-pinc-", tolower(sex_i), "-color.png")),
+           width = 7, height = 7*1.7)
+}
+```
+
+```{r}
+## Multinomial Quantile for Parental income
+for(sex_i in levels(list.pred$reg$multi2$quant1$sex)){
+# Core version
+list.graph$reg$multi2$quant1[[tolower(sex_i)]][["core"]] = list.pred$reg$multi2$quant1 %>% 
+  mutate(outcome = factor(outcome, levels = c("High", "Mid", "Low", "Out"),
+    labels = c("High-paying", "Middling", "Low-paying", "Out-of-work"))) %>% 
+  subset(sex == sex_i) %>% filter(complete.cases(.)) %>%
+  setDT %>% dcast(sex + quant + region + outcome ~ cohort, value.var = "value") %>% 
+  mutate(delta = (BCS70-NCDS58)*100, # in percent
+         region = factor(region, levels = names(location_names), labels = location_names)) %>% 
+  
+  ggplot(aes(x = quant, y = delta, fill = outcome)) +
+  geom_bar(stat = "identity", position = position_dodge2(padding = 0)) +
+  facet_wrap(. ~ region, nrow = 3) +
+  theme_bw() +
+  labs(x = "Parental income decile", y = "Change in the probability (in pp.)", 
+       fill = "Occupation") +
+  theme(legend.position = c(.75, 0.15), legend.justification = "center",
+        legend.box = "horizontal", panel.spacing = unit(.7, "lines"),
+        legend.key.width = unit(1, 'cm'), #change legend key width
+        legend.title = element_text(size=14), #change legend title font size
+        legend.text = element_text(size=10))
+
+# Paper version
+list.graph$reg$multi2$quant1[[tolower(sex_i)]][["paper"]] = list.graph$reg$multi2$quant1[[tolower(sex_i)]][["core"]] +
+  scale_fill_grey(start = 0, end = .8)
+    ggsave(file.path(loc_graphic, paste0("reg-multi2-quant-", tolower(sex_i), ".png")), 
+           width = 10, height = 10/1.5)
+  
+# Color version
+list.graph$reg$p3$quant[[tolower(sex_i)]][["color"]] = list.graph$reg$p3$quant[[tolower(sex_i)]][["core"]] +
+  scale_fill_manual(values = alpha(brewer.pal(4, "Set1"), .7))
+    ggsave(file.path(loc_graphic, paste0("reg-p3-quant-", tolower(sex_i), "-color.png")),
+           width = 10, height = 10/1.5)
+}
+```
+
+## SHIFT SHARE IV
+
+```{r}
+# Share of 1-digit ISCO-08 occupation per NUTS-1 region
+lfs2.share <- lfs2 %>% 
+  subset(year == 1979 & age %in% c(25:49)) %>% 
+  subset(!is.na(isco88)) %>% 
+  mutate(isco08 = substr(as.character(isco88), 1,1))  %>% 
+  select(location, isco08) %>% 
+  group_by(location, isco08) %>% 
+  summarize(n = n(), .groups = "keep") %>% 
+  mutate(occ_group = factor(isco08, levels = c(1:3, 4, 6:8, 5, 9),
+                            labels = c(rep("High", 3),
+                                       rep("Mid", 4),
+                                       rep("Low", 2)))) %>% 
+  # Share at the occupational group level
+  group_by(location) %>%  #, occ_group) %>% 
+  mutate(share = n/sum(n)) %>% 
+  ungroup
+
+# Merge with shift IV
+shiftIV2 <- lfs2.share %>% 
+  merge(shiftIV, by = c("occ_group", "isco08")) %>% 
+  select(location, occ_group, isco08, share, starts_with("shift"), everything()) %>% 
+  arrange(location, isco08)
+
+# Preview
+head(shiftIV2)
+```
+
+
+```{r}
+# Compute the shift share IV polarization
+shiftIV3 <- shiftIV2 %>% 
+  group_by(location) %>% #, occ_group) %>% 
+  summarize(shiftshareEU = abs(sum(share*shiftEU)),
+            shiftshareUK = abs(sum(share*shiftUK)), .groups = "keep") %>% 
+  mutate(loc = factor(location, levels = location_names,
+                      labels = names(location_names)))
+# First stage
+first.stage <- lm(shiftshareUK ~ shiftshareEU, data = shiftIV3)
+summary(first.stage)
+
+# Predicted
+shiftIV3$shiftshareIV <- fitted.values(first.stage)
+
+# First stage IV
+shiftIV3 %>% 
+  
+  ggplot(aes(x = shiftshareEU, y = shiftshareUK)) +
+  geom_smooth(method = "lm", color = "black") +
+  geom_text_repel(aes(label=loc), size = 3,  show.legend = F) +
+  geom_point() +
+  theme_bw() +
+  labs(x = "Employment polarization (Shift-share EU)",
+       y = "Employment polarization (Shift-share UK)")
+
+ggsave(file.path(loc_graphic, "regiv-firststage.png"), width = 7, height = 7/2)
+```
+
+```{r}
+# Unemployment change between 1992 and 2004 at the regional level
+lfs.unemp <- lfs2 %>% 
+  subset(year %in% c(1992, 2004)) %>% 
+  subset(activity %in% c("Emp", "Self", "Unemp")) %>% 
+  subset(age %in% c(25:49)) %>%
+  group_by(year, location, activity) %>% 
+  summarize(n = n(), .groups = "keep") %>% 
+  group_by(year, location) %>% 
+  mutate(share = n/sum(n)*100) %>% 
+  subset(activity == "Unemp") %>% 
+  select(-activity, -n) %>% 
+  as.data.table %>% dcast(location ~ year, value.var = "share") %>% 
+  mutate(delta_unemp = `2004` - `1992`)
+
+# Preview
+head(lfs.unemp)
+```
+
+```{r}
+# Weights from cohort data
+df.weight <- df.wide %>% 
+  rename(location = region_16yo) %>% 
+  group_by(location) %>% 
+  summarize(weight_cohort = n()) %>% 
+  ungroup
+# Weights from LFS data
+lfs.weight <- lfs2 %>% 
+  subset(year == 1979) %>% 
+  group_by(location) %>% 
+  summarize(weight_uklfs = n()) %>% 
+  ungroup
+# Merge both
+IV.weight <- merge(lfs.weight, df.weight, by = "location") %>% 
+  mutate_at(vars(starts_with("weight")), list("shr" = ~ {./sum(.)*100}))
+```
+
+```{r}
+# Inverse of the standard errors
+ivreg.invsd <- 1/c("EA" = 0.26, "EM" = 0.21, 
+                   "N" = 0.21, "NW" = 0.15, "SC" = 0.17, 
+                   "SE" = 0.11, "SW" = 0.21, "WAL" = 0.22, "WM" = 0.18, "YH" = 0.17)
+
+# Merge mobility coefficients with shift share
+shiftIV4 <- df.coef.multi1 %>% 
+  select(outcome, location, coef_Pinc, coef_BCS70xPinc) %>% 
+  merge(shiftIV3, by = "location") %>% 
+  merge(lfs.unemp, by = "location") %>% 
+  merge(IV.weight, by = "location") %>% 
+  mutate(loc = factor(location, levels = location_names, 
+                      labels = names(location_names)),
+         outcome = factor(outcome, levels = c("Low", "Mid", "High"),
+                          labels = c("Low-paying", "Middling", 
+                                     "High-paying"))) %>% 
+  merge(data.frame(loc = names(ivreg.invsd), ivreg.invsd), by = "loc")
+```
+
+```{r}
+# Empty list
+list.reg$ivreg$coef <- list()
+
+# Regressions
+list.reg$ivreg$coef$low <- lm(coef_BCS70xPinc ~ shiftshareIV + coef_Pinc + delta_unemp,
+           data = shiftIV4, weights = ivreg.invsd,
+           subset = outcome == "Low-paying")
+list.reg$ivreg$coef$mid <- lm(coef_BCS70xPinc ~ shiftshareIV + coef_Pinc + delta_unemp,
+           data = shiftIV4, weights = ivreg.invsd,
+           subset = outcome == "Middling")
+list.reg$ivreg$coef$high <- lm(coef_BCS70xPinc ~ shiftshareIV + coef_Pinc + delta_unemp,
+           data = shiftIV4, weights = ivreg.invsd,
+           subset = outcome == "High-paying")
+
+# Preview
+screenreg(list.reg$ivreg$coef, stars = c(0.01, 0.05, 0.1))
+summary(list.reg$ivreg$coef$low)
+
+list.coef$iv <- list(
+  "(Intercept)" = "Intercept",
+  "shiftshareIV" = "$\\Delta Pol^r$",
+  "coef_Pinc" = "Par. Inc.",
+  "delta_unemp" = "Unemployment change"
+)
+
+# Write table (LaTeX format)
+list.table$ivreg$secondstage = tabular(list.reg$ivreg$coef,
+        coef_map = list.coef$iv,
+        model_map = c("Low-paying", "Middling", "High-paying"),
+        reg.type = "Linear regression - Dep. var.: $\\Delta\\beta_k$",
+        digits = 2)
+# Write
+writeLines(list.table$ivreg$secondstage, con = file.path(loc_tabular, "iv-secondstage.tex"), sep = "\n")
+```
+
+```{r}
+## Plot with the residuals
+shiftIV5 <- shiftIV4 %>% 
+  mutate(coef_BCS70xPinc = residuals(lm(coef_BCS70xPinc ~ coef_Pinc + delta_unemp, 
+                                            weights = ivreg.invsd)),
+         shiftshareIV = residuals(lm(shiftshareIV ~ coef_Pinc + delta_unemp,
+                                         weights = ivreg.invsd)),
+         specification = "With controls")
+
+# IV without controls
+list.graph$reg$regiv$shift1 <- shiftIV4 %>% 
+  mutate(specification = "Without controls") %>%
+  
+  ggplot(aes(x = shiftshareIV, y = coef_BCS70xPinc, size = ivreg.invsd)) +
+  geom_smooth(aes(weight = weight_uklfs), 
+              method = "lm", data = shiftIV4, color = "black", se = F) +
+  geom_smooth(aes(weight = weight_uklfs), linetype = "dashed",
+              method = "lm", data = subset(shiftIV4, loc != "WM"), 
+              linetype = "solid", color = "black", se = F) +
+  geom_point(alpha = .5) +
+  geom_text_repel(aes(label=loc), size = 3,  show.legend = F) +
+  facet_grid(. ~ outcome) +
+  theme_bw() +
+  labs(subtitle = expression("Change in parental income coefficient for second-period occupation "*Delta*beta[k]),
+       x = "Change in employment polarization (Shift-share IV)",
+       y = element_blank()) +
+  guides(weight = "none", size = "none")
+ggsave(file.path(loc_graphic, "regiv-secondstage-nocontrols.png"), width = 7, height = 7/2)
+
+# IV with controls
+list.graph$reg$regiv$shift2 <- shiftIV5 %>% 
+  
+  ggplot(aes(x = shiftshareIV, y = coef_BCS70xPinc, size = ivreg.invsd)) +
+  geom_smooth(aes(weight = weight_uklfs), 
+              method = "lm", data = shiftIV5, linetype = "solid", color = "black", se = F) +
+  geom_point(alpha = .5) +
+  geom_text_repel(aes(label=loc), size = 3,  show.legend = F) +
+  facet_grid(. ~ outcome) +
+  theme_bw() +
+  labs(subtitle = expression("Change in parental income coefficient for second-period occupation "*Delta*beta[k]), title = element_blank(),
+       x = "Change in employment polarization (Shift-share IV)",
+       y = element_blank()) +
+  guides(weight = "none", size = "none")
+ggsave(file.path(loc_graphic, "regiv-secondstage.png"), width = 7, height = 7/2)
+```
+
+```{r}
+# Unweighted
+list.graph$reg$regiv$shift1NoW <- shiftIV4 %>% 
+  mutate(specification = "Without controls") %>%
+  
+  ggplot(aes(x = shiftshareIV, y = coef_BCS70xPinc)) +
+  geom_smooth(method = "lm", data = shiftIV4, color = "black", se = F) +
+  geom_smooth(method = "lm", data = subset(shiftIV4, loc != "WM"), linetype = "dashed",
+              linetype = "solid", color = "black", se = F) +
+  geom_point(alpha = .5) +
+  geom_text_repel(aes(label=loc), size = 3,  show.legend = F) +
+  facet_grid(specification ~ outcome) +
+  theme_bw() +
+  labs(subtitle = expression("Change in parental income coefficient for second-period occupation "*Delta*beta[k]),
+       x = "Change in employment polarization (Shift-share IV)",
+       y = element_blank()) +
+  guides(weight = "none", size = "none")
+
+# OLS BASELINE
+list.graph$reg$regiv$shift2NoW <- shiftIV5 %>% 
+  
+  ggplot(aes(x = shiftshareIV, y = coef_BCS70xPinc)) +
+  geom_smooth(method = "lm", data = shiftIV5, linetype = "solid", color = "black", se = F) +
+  geom_point(alpha = .5) +
+  geom_text_repel(aes(label=loc), size = 3,  show.legend = F) +
+  facet_grid(specification ~ outcome) +
+  theme_bw() +
+  labs(subtitle = expression("Change in parental income coefficient for second-period occupation "*Delta*beta[k]), title = element_blank(),
+       x = "Change in employment polarization (Shift-share IV)",
+       y = element_blank()) +
+  guides(weight = "none", size = "none")
+
+# Merge both figures
+list.graph$reg$regiv$allNoW <- ggarrange(list.graph$reg$regiv$shift1NoW,
+                                     list.graph$reg$regiv$shift2NoW,
+                                      ncol = 1, nrow = 2)
+# Save
+ggsave(file.path(loc_graphic, "regiv-instrument-noweight.png"), 
+       plot = list.graph$reg$regiv$allNoW,
+       width = 7, height = 7/1.25)
+```
+## Regional mobility and employment polarization
+
+```{r}
+# Datframe crossing mobility estimate at the regional level with LFS
+df.cross <- merge(select(df.coef.multi1, outcome, location, coef_BCS70xPinc),
+      subset(lfs.pol, metric == "mean" & type == "change") %>%
+        select(loc, location, lfs_occ, change = value),
+      by = "location") %>% 
+   mutate(outcome = factor(outcome, levels = c("High", "Mid", "Low", "Out")))
+```
+
+## Mobility at the individual level
+
+### Coefficients
+
+```{r}
+# List of coefficients for occupational logit regressions [SHORT]
+list.coef$occreg.short = list(
+  "cohortBCS70" = "BCS cohort",
+  "mid1minusshr_STD" = "Non-Middling share",
+  "midshr_STD" = "Middling share",
+  "highshr_STD" = "High-paying share",
+  "pinc_LOG_STD" = "Parental income",
+  "cohortBCS70:pinc_LOG_STD" = "Par. inc. $\\times$ BCS",
+  "mid1minusshr_STD:pinc_LOG_STD" = "Par. inc. $\\times$ Non-Mid. share",
+  "midshr_STD:pinc_LOG_STD" = "Par. inc. $\\times$ Mid. share",
+  "highshr_STD:pinc_LOG_STD" = "Par. inc. $\\times$ High. share"
+)
+```
+
+###  Regressions
+
+```{r}
+# Share of middling with a measure consistent with the IV
+lfs.pol.new <- lfs2 %>% 
+  subset(year %in% c(1992, 2004) & age %in% c(25:49)) %>% 
+  subset(!is.na(isco88)) %>% 
+  mutate(isco08 = substr(as.character(isco88), 1,1))  %>% 
+  select(year, location, isco08) %>% 
+  mutate(occ_group = factor(isco08, levels = c(1:3, 4, 6:8, 5, 9),
+                            labels = c(rep("High", 3),
+                                       rep("Mid", 4),
+                                       rep("Low", 2)))) %>% 
+  group_by(year, location, occ_group) %>% 
+  summarize(n = n(), .groups = "keep") %>% 
+  # Share at the occupational group level
+  group_by(year, location) %>%
+  mutate(value = n/sum(n)*100) %>% 
+  ungroup %>% 
+  # Assign BCS to the 2004 level and NCDS to the 1992
+  mutate(cohort = factor(year, labels = c("NCDS58", "BCS70")))
+
+lfs.pol2.new <- lfs.pol.new %>% 
+  select(cohort, location, occ_group, value) %>% 
+  mutate(occ_group = factor(occ_group, 
+                            levels = c("Low", "Mid", "High"),
+                            labels = c("lowshr", "midshr", "highshr"))) %>% 
+  as.data.table %>% 
+  dcast(cohort + location ~ occ_group, value.var = "value") %>% 
+  mutate(mid1minusshr = 100-midshr) %>%
+  mutate_at(vars(ends_with("shr")), list("STD" = ~ standardize(.)))
+```
+
+
+```{r}
+## Average over the period
+# lfs.pol2 = lfs.pol %>%
+#   subset(metric == "mean" & type == "level") %>%
+#   mutate(lfs_occ = factor(lfs_occ, levels = c("Low-paying", "Middling", "High-paying"),
+#     labels = c("lowshr", "midshr", "highshr"))) %>%
+#   setDT %>% dcast(variable + location + loc ~ lfs_occ, value.var = "value") %>%
+#   select(cohort = variable, location, loc, ends_with("shr")) %>%
+#   mutate(mid1minusshr = 100-midshr) %>%
+#   mutate_at(vars(ends_with("shr")), list("STD" = ~ standardize(.)))
+```
+
+```{r}
+df.regocc = merge(df.wide, lfs.pol2.new, # lfs.pol2
+  by.x = c("cohort", "region_16yo"), by.y = c("cohort", "location")) %>% 
+  arrange(cohort, id)
+```
+
+```{r}
+# Empty list for results
+list.reg$occreg = list()
+list.formula$occreg$multi = list()
+
+# Formulas
+list.formula$occreg$multi = list(
+  # Non-Mid share
+  occ_group4_p3 ~ cohort*sex + cohort*pinc_LOG_STD + region_16yo,
+  occ_group4_p3 ~ midshr_STD*sex + midshr_STD*pinc_LOG_STD + region_16yo,
+  # Detail
+  occ_group4_p3 ~ midshr_STD*sex + midshr_STD*pinc_LOG_STD + region_16yo,
+  occ_group4_p3 ~ highshr_STD*sex + highshr_STD*pinc_LOG_STD + region_16yo,
+  occ_group4_p3 ~ midshr_STD*sex + highshr_STD*sex + midshr_STD*pinc_LOG_STD + highshr_STD*pinc_LOG_STD + region_16yo
+  )
+
+# Multinomial logistic regression
+list.reg$occreg$multi1 = multinom(list.formula$occreg$multi[[1]], data = df.regocc, maxit = 200)
+list.reg$occreg$multi2 = multinom(list.formula$occreg$multi[[2]], data = df.regocc, maxit = 200)
+list.reg$occreg$multi3 = multinom(list.formula$occreg$multi[[3]], data = df.regocc, maxit = 200)
+list.reg$occreg$multi4 = multinom(list.formula$occreg$multi[[4]], data = df.regocc, maxit = 200)
+list.reg$occreg$multi5 = multinom(list.formula$occreg$multi[[5]], data = df.regocc, maxit = 200)
+
+## Multinomial [SHORT VERSION]
+# Write table (LaTeX format)
+list.table$occreg$multi2A$short = tabular(list.reg$occreg[1:2],
+        coef_map = list.coef$occreg.short,
+        model_map = rep(c("Low", "Mid", "High"), 2),
+        group.models = list("(1)" = c(1:3), "(2)" = c(4:6)),
+        reg.type = "Multinomial logit - Dep. var.: Second-period occupation", 
+        digits = 2, beside = T, include.groups = F, include.loglik = F)
+# Write
+writeLines(list.table$occreg$multi2A$short, con = file.path(loc_tabular, "occreg-multi2A-short.tex"), sep = "\n")
+# Write table (LaTeX format)
+list.table$occreg$multi2B$short = tabular(list.reg$occreg[3:5],
+        coef_map = list.coef$occreg.short,
+        model_map = rep(c("Low", "Mid", "High"), 3),
+        group.models = list("(1)" = c(1:3), "(2)" = c(4:6), "(3)" = c(7:9)),
+        reg.type = "Multinomial logit - Dep. var.: Second-period occupation", 
+        digits = 2, beside = T, include.groups = F, include.loglik = F)
+# Write
+writeLines(list.table$occreg$multi2B$short, con = file.path(loc_tabular, "occreg-multi2B-short.tex"), sep = "\n")
+```
+
+```{r}
+### First-period occupation
+## Multinomial [FULL VERSION]
+# Write table (LaTeX format)
+list.table$occreg$multi1$base = tabular(list.reg$occreg$multi1,
+        coef_map = list.coef$occreg,
+        model_map = c("Low-paying", "Middling", "High-paying"),
+        reg.type = "Multinomial logit - Dep. var.: First-period occupation", 
+        digits = 2, beside = T, include.groups = F, include.loglik = F)
+# Write
+writeLines(list.table$occreg$multi1$base, 
+           con = file.path(loc_tabular, "occreg-multi1-base.tex"), sep = "\n")
+## Multinomial [SHORT VERSION]
+# Write table (LaTeX format)
+list.table$occreg$multi1$short = tabular(list.reg$occreg$multi1,
+        coef_map = list.coef$occreg.short,
+        model_map = c("Low-paying", "Middling", "High-paying"),
+        reg.type = "Multinomial logit - Dep. var.: First-period occupation",
+        digits = 2, beside = T, include.groups = F, include.loglik = F)
+# Write
+writeLines(list.table$occreg$multi1$short, 
+           con = file.path(loc_tabular, "occreg-multi1-short.tex"), sep = "\n")
+```
+
+### Predictions
+
+```{r}
+# Prepare names
+predr.df.names = c("midshr_STD", "sex", "prob.Out.of.work", "prob.Low.paying", "prob.Middling",
+            "prob.High.paying", "L.prob.Out.of.work", "L.prob.Low.paying", "L.prob.Middling",
+            "L.prob.High.paying", "U.prob.Out.of.work", "U.prob.Low.paying", "U.prob.Middling",
+            "U.prob.High.paying")
+# Set empty dataset
+predr.df = data.frame(matrix(nrow = 0, ncol = length(predr.df.names))) %>% 
+  setNames(predr.df.names)
+
+# Loop to generate data
+for(pol_p in c(1, -1)){
+  for(sex_i in c(0:{length(levels(df.regocc$sex))-1})){
+
+  predr.effect = effect("pinc_LOG_STD", list.reg$occreg$multi2, 
+    xlevels = list("pinc_LOG_STD" = seq(-2, 2, by = .01)),
+    given.values = c("midshr_STD" = pol_p, "sexFemale" = sex_i))
+  
+  predr.df.add = data.frame(midshr_STD = pol_p, sex = sex_i, 
+    pinc_LOG_STD = seq(-2, 2, by = .01),
+    predr.effect$prob, predr.effect$lower.prob, predr.effect$upper.prob)
+  
+  predr.df = rbind(predr.df, predr.df.add)
+  
+  }
+}
+
+# midshr_STD_minus1 = paste0(round(-1*sd(lfs.pol2$midshr)+mean(lfs.pol2$midshr), 1), "% (-1 STD)")
+# midshr_STD_plus1 = paste0(round(1*sd(lfs.pol2$midshr)+mean(lfs.pol2$midshr), 1), "% (+1 STD)")
+
+midshr_STD_minus1 = paste0(round(-1*sd(lfs.pol2.new$midshr)+mean(lfs.pol2.new$midshr), 1), "% (-1 STD)")
+midshr_STD_plus1 = paste0(round(1*sd(lfs.pol2.new$midshr)+mean(lfs.pol2.new$midshr), 1), "% (+1 STD)")
+
+list.pred$regocc$multi2$pinc = predr.df %>% 
+  setDT %>% melt(id.vars = c("midshr_STD", "sex", "pinc_LOG_STD")) %>% 
+  separate(variable, into = c("type", "occ"), sep = "prob.") %>% 
+  mutate(
+    type = factor(type, levels = c("", "L.", "U."), labels = c("prob", "lower", "upper")),
+    occ = factor(occ, levels = c("Out.of.work", "Low.paying", "Middling", "High.paying"),
+                 labels = c("Out-of-work",  "Low-paying", "Middling", "High-paying")),
+    midshr_STD = factor(midshr_STD, levels = c(1, -1), 
+                          labels = c(midshr_STD_plus1, midshr_STD_minus1)),
+    sex = factor(sex, levels = c(0, 1), labels = c("Male", "Female")),
+  ) %>% 
+  setDT %>% dcast(midshr_STD + sex + pinc_LOG_STD + occ ~ type, value.var = "value")
+```
+
+```{r occ-multi2-pinc, fig.cap='Probability to be in each occupation at second period according to parental income', out.width='100%', fig.width = 7, fig.asp = .5, fig.align='center', dpi = 200}
+## Core
+list.graph$occ$multi2$pinc$core = list.pred$regocc$multi2$pinc %>%
+  mutate_at(vars(prob, lower, upper),  function(x){x*100}) %>% 
+  filter(complete.cases(.))
+
+# Paper version
+list.graph$occ$multi2$pinc$paper = list.graph$occ$multi2$pinc$core %>%
+  
+  ggplot(aes(x = pinc_LOG_STD, linetype = midshr_STD)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), fill = "grey70", alpha = .5, show.legend = F) +
+  geom_line(aes(y = prob)) +
+  facet_grid(sex ~ occ, scales="free") +
+  scale_y_continuous(limits = c(0, NA)) +
+  labs(x = "Parental income (log-standardised)", y = "Probability (in percent)", 
+       title = "Second-period occupation", linetype = "Middling share") +
+  theme_bw() +
+  theme(legend.position = "right")
+  ggsave(file.path(loc_graphic, "regocc-multi2-pinc.png"), width = 7, height = 7/2)
+
+# Color version
+list.graph$occ$multi2$pinc$color = list.graph$occ$multi2$pinc$core %>% 
+  
+  ggplot(aes(x = pinc_LOG_STD, linetype = midshr_STD)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = occ), alpha = .2, show.legend = F) +
+  geom_line(aes(y = prob, color = occ)) +
+  facet_grid(sex ~ occ, scales = "free") +
+  scale_color_manual(values = rev(brewer.pal(4, "Set1")), guide = "none") +
+  scale_fill_manual(values = rev(brewer.pal(4, "Set1")), guide = "none") +
+  scale_y_continuous(limits = c(0, NA)) +
+  labs(x = "Parental income (log-standardised)", y = "Probability (in percent)", 
+       title = "Second-period occupation", linetype = "Middling share") +
+  theme_bw() +
+  theme(legend.position = "right")
+  ggsave(file.path(loc_graphic, "regocc-multi2-pinc-color.png"), width = 7, height = 7/2)
+```
+
+
+# Education
+
+## Regressions
+
+### Linear (Child educ.)
+
+```{r}
+# Empty list for results
+list.reg$educ$linear1 = list()
+list.formula$educ$linear1 = list()
+# Formulas
+list.formula$educ$linear1 = list(
+  educ_PIR_STD ~ cohort*sex + cohort*pinc_LOG_STD,
+  . ~ . + educ_left_father_PIR_STD*cohort + educ_left_mother_PIR_STD*cohort,
+  . ~ . + psc_PIR_STD*cohort,
+  . ~ . + region_16yo + educ_int_father + educ_int_mother,
+  . ~ . + SIBsize_STD*cohort + eldest*cohort
+)
+# Regressions
+list.reg$educ$linear1$M1 = lm(list.formula$educ$linear1[[1]], data = df.educ1)
+list.reg$educ$linear1$M2 = update(list.reg$educ$linear1$M1, list.formula$educ$linear1[[2]])
+list.reg$educ$linear1$M3 = update(list.reg$educ$linear1$M2, list.formula$educ$linear1[[3]])
+list.reg$educ$linear1$M4 = update(list.reg$educ$linear1$M3, list.formula$educ$linear1[[4]])
+list.reg$educ$linear1$M5 = update(list.reg$educ$linear1$M4, list.formula$educ$linear1[[5]])
+# Write table (LaTeX format)
+list.table$educ$linear1 = tabular(list.reg$educ$linear1,
+        coef_map = list.coef$occ,
+        model_map = c("(1)", "(2)", "(3)", "(4)", "(5)"),
+        gof.row = list("Parents' interest in education" = c(" ", " ", " ", "Yes", "Yes"),
+                       "Region FE" = c(" ", " ", " ", "Yes", "Yes")),
+        reg.type = "Linear regression - Dep. var.: Education (in PIR-STD)", digits = 2)
+# Write
+writeLines(list.table$educ$linear1, con = file.path(loc_tabular, "educ-linear1.tex"), sep = "\n")
+```
+
+### Multinomial logit
+
+```{r}
+# Empty list for results
+list.reg$educ = list()
+list.formula$educ$multi = list()
+
+# Formulas
+list.formula$educ$multi = list(
+  occ_group4_p1 ~ cohort*sex + pinc_LOG_STD*cohort + educ_PIR_STD*cohort, # Multi1
+  occ_group4_p3 ~ cohort*sex + pinc_LOG_STD*cohort + educ_PIR_STD*cohort, # Multi2
+  occ_group4_p3 ~ cohort*sex + pinc_LOG_STD*cohort + educ_PIR_STD*cohort + occ_group4_p1*cohort #Multi3
+  )
+
+# Multinomial logistic regression
+list.reg$educ$multi1 = multinom(list.formula$educ$multi[[1]], data = df.wide)
+list.reg$educ$multi2 = multinom(list.formula$educ$multi[[2]], data = df.wide)
+list.reg$educ$multi3 = multinom(list.formula$educ$multi[[3]], data = df.wide)
+```
+
+```{r}
+### First-period occupation
+## Multinomial [FULL VERSION]
+# Write table (LaTeX format)
+list.table$educ$multi1$base = tabular(list.reg$educ$multi1,
+        coef_map = list.coef$occ,
+        model_map = c("Low-paying", "Middling", "High-paying"),
+        reg.type = "Multinomial logit - Dep. var.: First-period occupation", 
+        digits = 2, beside = T, include.groups = F, include.loglik = F)
+# Write
+writeLines(list.table$educ$multi1$base, 
+           con = file.path(loc_tabular, "educ-multi1-base.tex"), sep = "\n")
+```
+
+```{r}
+### Second-period occupation
+## Multinomial [FULL VERSION]
+# Write table (LaTeX format)
+list.table$educ$multi23$base = tabular(list(list.reg$educ$multi2, list.reg$educ$multi3),
+        coef_map = list.coef$occ,
+        model_map = rep(c("Low", "Mid", "High"), 2),
+        group.models = list("(1)" = c(1:3), "(2)" = c(4:6)),
+  groups = list("Change with respect to the referent group as first period occupation (Out-of-work)" = 9:11,
+                "Change between cohorts" = 12:14),
+        reg.type = "Multinomial logit - Dep. var.: Second-period occupation", 
+        digits = 2, beside = T, include.groups = F, include.loglik = F)
+# Write
+writeLines(list.table$educ$multi23$base, 
+           con = file.path(loc_tabular, "educ-multi23-base.tex"), sep = "\n")
+```
+
+# Robustness checks
+
+## Squared parental income
+
+```{r}
+# Empty list for results
+list.reg$rob1 = list()
+list.formula$rob1$multi = list()
+
+# Formulas
+list.formula$rob1$multi = list(
+  occ_group4_p1 ~ cohort*sex + pinc_STD*cohort, # Multi1A
+  occ_group4_p1 ~ cohort*sex + pinc_STD*cohort + pinc_STD2*cohort, # Multi1B
+  occ_group4_p3 ~ cohort*sex + pinc_STD*cohort, # Multi2A
+  occ_group4_p3 ~ cohort*sex + pinc_STD*cohort + pinc_STD2*cohort, # Multi2B
+  occ_group4_p3 ~ cohort*sex + pinc_STD*cohort + occ_group4_p1*cohort, #Multi3A
+  occ_group4_p3 ~ cohort*sex + pinc_STD*cohort + occ_group4_p1*cohort + pinc_STD2*cohort #Multi3B
+  )
+
+# Multinomial logistic regression
+list.reg$rob1$multi1A = multinom(list.formula$rob1$multi[[1]], data = df.wide)
+list.reg$rob1$multi1B = multinom(list.formula$rob1$multi[[2]], data = df.wide)
+list.reg$rob1$multi2A = multinom(list.formula$rob1$multi[[3]], data = df.wide)
+list.reg$rob1$multi2B = multinom(list.formula$rob1$multi[[4]], data = df.wide)
+list.reg$rob1$multi3A = multinom(list.formula$rob1$multi[[5]], data = df.wide)
+list.reg$rob1$multi3B = multinom(list.formula$rob1$multi[[6]], data = df.wide)
+```
+
+
+```{r}
+### First-period occupation
+## Multinomial [FULL VERSION]
+# Write table (LaTeX format)
+list.table$rob1$multi1$base = tabular(list(list.reg$rob1$multi1A, list.reg$rob1$multi1B),
+        coef_map = list.coef$occ,
+        model_map = rep(c("Low", "Mid", "High"), 2),
+        group.models = list("(1)" = c(1:3), "(2)" = c(4:6)),
+        reg.type = "Multinomial logit - Dep. var.: First-period occupation", 
+        digits = 2, beside = T, include.groups = F, include.loglik = F)
+# Write
+writeLines(list.table$rob1$multi1$base, 
+           con = file.path(loc_tabular, "rob1-multi1-base.tex"), sep = "\n")
+## Multinomial [SHORT VERSION]
+# Write table (LaTeX format)
+list.table$rob1$multi1$short = tabular(list(list.reg$rob1$multi1A, list.reg$rob1$multi1B),
+        coef_map = list.coef$occ.short,
+        model_map = rep(c("Low", "Mid", "High"), 2),
+        group.models = list("(1)" = c(1:3), "(2)" = c(4:6)),
+        reg.type = "Multinomial logit - Dep. var.: First-period occupation",
+        digits = 2, beside = T, include.groups = F, include.loglik = F)
+# Write
+writeLines(list.table$rob1$multi1$short, 
+           con = file.path(loc_tabular, "rob1-multi1-short.tex"), sep = "\n")
+```
+
+```{r}
+### Second-period occupation MULTI2
+## Multinomial [FULL VERSION]
+# Write table (LaTeX format)
+list.table$rob1$multi2$base = tabular(list(list.reg$rob1$multi2A, list.reg$rob1$multi2B),
+        coef_map = list.coef$occ,
+        model_map = rep(c("Low", "Mid", "High"), 2),
+        group.models = list("(1)" = c(1:3), "(2)" = c(4:6)),
+        reg.type = "Multinomial logit - Dep. var.: Second-period occupation", 
+        digits = 2, beside = T, include.groups = F, include.loglik = F)
+# Write
+writeLines(list.table$rob1$multi2$base, 
+           con = file.path(loc_tabular, "rob1-multi2-base.tex"), sep = "\n")
+## Multinomial [SHORT VERSION]
+# Write table (LaTeX format)
+list.table$rob1$multi2$short = tabular(list(list.reg$rob1$multi2A, list.reg$rob1$multi2B),
+        coef_map = list.coef$occ.short,
+        model_map = rep(c("Low", "Mid", "High"), 2),
+        group.models = list("(1)" = c(1:3), "(2)" = c(4:6)),
+        reg.type = "Multinomial logit - Dep. var.: Second-period occupation", 
+        digits = 2, beside = T, include.groups = F, include.loglik = F)
+# Write
+writeLines(list.table$rob1$multi2$short, 
+           con = file.path(loc_tabular, "rob1-multi2-short.tex"), sep = "\n")
+```
+```{r}
+### Second-period occupation MULTI3
+## Multinomial [FULL VERSION]
+# Write table (LaTeX format)
+list.table$rob1$multi3$base = tabular(list(list.reg$rob1$multi3A, list.reg$rob1$multi3B),
+        coef_map = list.coef$occ,
+        model_map = rep(c("Low", "Mid", "High"), 2),
+        group.models = list("(1)" = c(1:3), "(2)" = c(4:6)),
+  groups = list("Change with respect to the referent group as first period occupation (Out-of-work)" = 9:11,
+                "Change between cohorts" = 12:14),
+        reg.type = "Multinomial logit - Dep. var.: Second-period occupation", 
+        digits = 2, beside = T, include.groups = F, include.loglik = F)
+# Write
+writeLines(list.table$rob1$multi3$base, 
+           con = file.path(loc_tabular, "rob1-multi3-base.tex"), sep = "\n")
+## Multinomial [SHORT VERSION]
+# Write table (LaTeX format)
+list.table$rob1$multi3$short = tabular(list(list.reg$rob1$multi3A, list.reg$rob1$multi3B),
+        coef_map = list.coef$occ.short,
+        model_map = rep(c("Low", "Mid", "High"), 2),
+        group.models = list("(1)" = c(1:3), "(1)" = c(4:6)),
+  groups = list("Change with respect to the referent group as first period occupation (Out-of-work)" = 5:7,
+                "Change between cohorts" = 8:10),
+        reg.type = "Multinomial logit - Dep. var.: Second-period occupation", 
+        digits = 2, beside = T, include.groups = F, include.loglik = F)
+# Write
+writeLines(list.table$rob1$multi3$short, con = file.path(loc_tabular, "rob1-multi3-short.tex"), sep = "\n")
+```
+
+## First-period age
+
+```{r}
+# Data
+df.rob2 = df.long %>% 
+  select(id, cohort, age, sex, pinc_LOG_STD, occ_group4) %>% 
+  subset(age %in% c(23, 26, 42)) %>% 
+  setDT %>% dcast(id + cohort + sex + pinc_LOG_STD ~ age, 
+                  value.var = "occ_group4") %>% 
+  rename("occ_group4_age23" = `23`, "occ_group4_age26" = `26`, "occ_group4_p3" = `42`, ) %>% 
+  merge(select(df.wide, id, occ_group4_p1), by = "id")
+```
+
+```{r}
+# People in education at age 23 and 26? 7% in educ at age 23 for the BCS70
+df.long %>% 
+  select(id, cohort, age, sex, pinc_LOG_STD, occ_group5) %>% 
+  subset(age %in% c(23, 26, 42)) %>% 
+  group_by(cohort, age, occ_group5) %>% 
+  count() %>% 
+  group_by(cohort, age) %>% 
+  mutate(share = round(n/sum(n)*100, 2)) %>% 
+  as.data.table %>% 
+  dcast(occ_group5 ~ cohort + age, value.var = "share")
+```
+
+```{r}
+# Empty list for results
+list.reg$rob2 = list()
+list.formula$rob2$multi = list()
+
+# Formulas
+list.formula$rob2$multi = list(
+  occ_group4_p1 ~ cohort*sex + pinc_LOG_STD*cohort, # Multi1A
+  occ_group4_age23 ~ cohort*sex + pinc_LOG_STD*cohort, # Multi1B
+  occ_group4_age26 ~ cohort*sex + pinc_LOG_STD*cohort, # Multi1C
+  occ_group4_p3 ~ cohort*sex + pinc_LOG_STD*cohort + occ_group4_p1*cohort, #Multi3A
+  occ_group4_p3 ~ cohort*sex + pinc_LOG_STD*cohort + occ_group4_age23*cohort, #Multi3B
+  occ_group4_p3 ~ cohort*sex + pinc_LOG_STD*cohort + occ_group4_age26*cohort #Multi3C
+  )
+
+# Multinomial logistic regression
+list.reg$rob2$multi1A = multinom(list.formula$rob2$multi[[1]], data = df.rob2)
+list.reg$rob2$multi1B = multinom(list.formula$rob2$multi[[2]], data = df.rob2)
+list.reg$rob2$multi1C = multinom(list.formula$rob2$multi[[3]], data = df.rob2)
+list.reg$rob2$multi3A = multinom(list.formula$rob2$multi[[4]], data = df.rob2)
+list.reg$rob2$multi3B = multinom(list.formula$rob2$multi[[5]], data = df.rob2)
+list.reg$rob2$multi3C = multinom(list.formula$rob2$multi[[6]], data = df.rob2)
+```
+
+
+```{r}
+### First-period occupation
+## Multinomial [FULL VERSION]
+# Write table (LaTeX format)
+list.table$rob2$multi1$base = tabular(list(list.reg$rob2$multi1A, list.reg$rob2$multi1B, list.reg$rob2$multi1C),
+        coef_map = list.coef$occ,
+        model_map = rep(c("Low", "Mid", "High"),3),
+        group.models = list("(Base)" = c(1:3), "(Age 23)" = c(4:6), "(Age 26)" = c(7:9)),
+        reg.type = "Multinomial logit - Dep. var.: First-period occupation", 
+        digits = 2, beside = T, include.groups = F, include.loglik = F)
+# Write
+writeLines(list.table$rob2$multi1$base, 
+           con = file.path(loc_tabular, "rob2-multi1-base.tex"), sep = "\n")
+```
+
+```{r}
+### Second-period occupation MULTI3
+## Multinomial [FULL VERSION]
+# Write table (LaTeX format)
+list.table$rob2$multi3$base = tabular(list(list.reg$rob2$multi3A, list.reg$rob2$multi3B, list.reg$rob2$multi3C),
+        coef_map = list.coef$occ,
+        model_map = rep(c("Low", "Mid", "High"), 3),
+        group.models = list("(Base)" = c(1:3), "(Age 23)" = c(4:6), "(Age 26)" = c(7:9)),
+  groups = list("Change with respect to the referent group as first period occupation (Out-of-work)" = 7:9,
+                "Change between cohorts" = 10:12),
+        reg.type = "Multinomial logit - Dep. var.: Second-period occupation", 
+        digits = 2, beside = T, include.groups = F, include.loglik = F)
+# Write
+writeLines(list.table$rob2$multi3$base, 
+           con = file.path(loc_tabular, "rob2-multi3-base.tex"), sep = "\n")
+```
+
+## Mobility left-hand side (Giovanni)
+
+```{r}
+# Empty list for results
+list.reg$mob$logit = list()
+
+# Formulas
+list.formula$mob$logit = list(
+  # Raw
+  mobility == "Down" ~ cohort*sex + pinc_LOG_STD*cohort, # Persist
+  mobility == "Persist" ~ cohort*sex + pinc_LOG_STD*cohort, # Persist
+  mobility == "Up" ~ cohort*sex + pinc_LOG_STD*cohort, # Persist
+  # Aggregate
+  mob2down == "Not Up" ~ cohort*sex + pinc_LOG_STD*cohort, # NotUp
+  mob2up == "Not Down" ~ cohort*sex + pinc_LOG_STD*cohort # Not Down
+)
+
+## Binomial logistic regression
+# Raw
+list.reg$mob$logit$down = glm(list.formula$mob$logit[[1]], family = "binomial", data = df.wide)
+list.reg$mob$logit$persist = glm(list.formula$mob$logit[[2]], family = "binomial", data = df.wide)
+list.reg$mob$logit$up = glm(list.formula$mob$logit[[3]], family = "binomial", data = df.wide)
+# Aggregate
+list.reg$mob$logit$notdown = glm(list.formula$mob$logit[[4]], family = "binomial", data = df.wide)
+list.reg$mob$logit$notup = glm(list.formula$mob$logit[[5]], family = "binomial", data = df.wide)
+
+## Binomial
+# Write table (LaTeX format)
+list.reg$mob$logit$base = tabular(list.reg$mob$logit,
+        coef_map = list.coef$occ,
+        model_map = c("Down", "Persist", "Up", "Not Up (vs Up)", "Not Down (vs Down)"),
+        group.models = list("(Raw)" = c(1:3), "(Aggregate)" = c(4:5)),
+        reg.type = "Binomial logistic regression - Dependent variable: Types of mobility", digits = 2)
+# Write
+writeLines(list.reg$mob$logit$base, con = file.path(loc_tabular, "mob-logit-base.tex"), sep = "\n")
+```
+
+```{r}
+# Empty list for results
+list.reg$mob$multi = list()
+
+# Formulas
+list.formula$mob$multi = list(
+  # Raw
+  mobility ~ cohort*sex + pinc_LOG_STD*cohort#, # Multinom
+)
+
+## Binomial logistic regression
+# Raw
+list.reg$mob$multi1A = multinom(list.formula$mob$multi[[1]], data = df.wide %>% 
+                                mutate(mobility = relevel(mobility, ref = "Down")))
+list.reg$mob$multi1B = multinom(list.formula$mob$multi[[1]], data = df.wide %>% 
+                                mutate(mobility = relevel(mobility, ref = "Persist")))
+
+## Multinomial [FULL VERSION]
+# Write table (LaTeX format)
+list.reg$mob$multi$base = tabular(list(list.reg$mob$multi1A, list.reg$mob$multi1B),
+        coef_map = list.coef$occ,
+        model_map = c("Persist", "Upward", "Downward", "Upward"),
+        group.models = list("(Base outcome = Down)" = c(1:2), "(Base outcome = Persist)" = c(3:4)),
+        reg.type = "Multinomial logistic regression - Dependent variable: Mobility type", 
+        digits = 2, beside = T, include.groups = F, include.loglik = F)
+# Write
+writeLines(list.reg$mob$multi$base, con = file.path(loc_tabular, "mob-multi-base.tex"), sep = "\n")
+
+```
+
+### Predictions
+
+```{r}
+# Generate data
+list.pred$mob$multi1 = data.frame(
+  cohort = rep(c("NCDS58", "BCS70"), each = 10),
+  quant = rep(c(1:10), 2),
+  sex = "Male",
+  pinc_LOG_STD = c(quantile(df.wide$pinc_LOG_STD[df.wide$cohort == "NCDS58"], probs = seq(0.05, 0.95, .1)),
+                   quantile(df.wide$pinc_LOG_STD[df.wide$cohort == "BCS70"], probs = seq(0.05, 0.95, .1)))
+  ) %>% 
+  cbind(., pred = predict(list.reg$mob$multi1A, newdata = ., type = "probs")) %>% 
+  setDT %>% melt(id.vars = c("cohort", "quant", "sex", "pinc_LOG_STD"), variable.name = "mobility") %>% 
+  mutate(mobility = mobility %>% str_remove("pred.") %>% 
+           factor(levels = c("Down", "Persist", "Up"))) %>% 
+  setDT %>% dcast.data.table(sex + quant + mobility ~ cohort, value.var = "value") %>% 
+  mutate_at(vars(NCDS58, BCS70), function(x){x*100}) %>% 
+  mutate(delta = BCS70-NCDS58)
+```
+
+```{r occ-p3-multi1, fig.cap='Change in probability to be in each occupation at second period according to parental income', out.width='100%', fig.width = 7, fig.asp = .66, fig.align='center', dpi = 200}
+## Core
+list.graph$mob$multi1 = list.pred$mob$multi1 %>% 
+  mutate(mobility = factor(mobility, levels = c("Down", "Persist", "Up"))) %>% 
+  mutate(quant = factor(quant)) %>%
+  
+  ggplot(aes(x = quant, y = delta, fill = mobility)) +
+  geom_bar(stat = "identity", position = position_dodge2(padding = 0)) +
+  theme_bw() +
+  labs(x = "Parental income decile", y = "Change in the probability (in pp.)", 
+       fill = "Type of mobility") +
+  theme(legend.position = "bottom")
+
+## Paper version
+list.graph$mob$multi1 +
+  scale_fill_grey(start = .8, end = 0)
+  ggsave(file.path(loc_graphic, "mob-multi1-pinc.png"), width = 7, height = 7/1.5)
+
+## Color version
+list.graph$mob$multi1 +
+  scale_fill_manual(values = alpha(rev(brewer.pal(3, "Set1")), alpha = .7))
+  ggsave(file.path(loc_graphic, "mob-multi1-pinc-color.png"), width = 7, height = 7/1.5)
+
+```
+
